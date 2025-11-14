@@ -58,9 +58,9 @@ fn load_users_from_file(file_path: &str) -> HashSet<User> {
 }
 
 pub(crate) fn new_app(args: &Args) -> App {
-    return App {
+    App {
         server_status: Mutex::new(ServerStatus::Starting),
         users: Mutex::new(load_users_from_file(&args.users_file)),
         args: args.clone(),
-    };
+    }
 }

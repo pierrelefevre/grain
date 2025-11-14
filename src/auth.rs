@@ -53,5 +53,5 @@ pub(crate) async fn get(
         }
     }
 
-    return unauthorized(&data.args.host);
+    unauthorized(&data.args.host)
 }

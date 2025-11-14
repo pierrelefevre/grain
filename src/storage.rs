@@ -4,7 +4,7 @@ use std::{
     io::Write,
 };
 
-fn sanitize_string(input: &str) -> String {
+pub(crate) fn sanitize_string(input: &str) -> String {
     input
         .chars()
         .map(|c| {
@@ -17,12 +17,7 @@ fn sanitize_string(input: &str) -> String {
         .collect()
 }
 
-pub(crate) async fn write_blob(
-    org: &String,
-    repo: &String,
-    req_digest_string: &String,
-    body: Body,
-) -> bool {
+pub(crate) async fn write_blob(org: &str, repo: &str, req_digest_string: &str, body: Body) -> bool {
     let bytes_res = axum::body::to_bytes(body, usize::MAX).await;
     if bytes_res.is_err() {
         return false;
@@ -33,7 +28,7 @@ pub(crate) async fn write_blob(
         .strip_prefix("sha256:")
         .unwrap_or(req_digest_string);
     let body_digest = sha256::digest(bytes.as_ref());
-    let matches = req_digest == &body_digest;
+    let matches = req_digest == body_digest;
 
     log::info!(
         "storage/write_file: digest: {}, body_digest: {}, matches: {}",
@@ -52,15 +47,10 @@ pub(crate) async fn write_blob(
         sanitize_string(repo),
     );
 
-    return write_bytes_to_file(&base_path, &req_digest, &bytes).await;
+    write_bytes_to_file(&base_path, req_digest, &bytes).await
 }
 
-pub(crate) async fn write_manifest(
-    org: &String,
-    repo: &String,
-    reference: &String,
-    body: Body,
-) -> bool {
+pub(crate) async fn write_manifest(org: &str, repo: &str, reference: &str, body: Body) -> bool {
     let bytes_res = axum::body::to_bytes(body, usize::MAX).await;
     if bytes_res.is_err() {
         return false;
@@ -73,11 +63,11 @@ pub(crate) async fn write_manifest(
         sanitize_string(repo),
     );
 
-    return write_bytes_to_file(&base_path, &reference, &bytes).await;
+    write_bytes_to_file(&base_path, reference, &bytes).await
 }
 
 pub(crate) async fn write_bytes_to_file(base_path: &str, file_name: &str, bytes: &[u8]) -> bool {
-    if let Err(e) = create_dir_all(&base_path) {
+    if let Err(e) = create_dir_all(base_path) {
         log::error!("storage/write_file: error creating directory: {}", e);
         return false;
     }
@@ -90,7 +80,7 @@ pub(crate) async fn write_bytes_to_file(base_path: &str, file_name: &str, bytes:
         }
     };
 
-    if let Err(e) = file.write_all(&bytes) {
+    if let Err(e) = file.write_all(bytes) {
         log::error!("storage/write_file: error writing to file: {}", e);
         return false;
     }
@@ -102,5 +92,33 @@ pub(crate) async fn write_bytes_to_file(base_path: &str, file_name: &str, bytes:
 
     log::info!("storage/write_file: wrote to {}", base_path);
 
-    return true;
+    true
+}
+
+pub(crate) fn read_blob(org: &str, repo: &str, digest: &str) -> Result<Vec<u8>, std::io::Error> {
+    let sanitized_org = sanitize_string(org);
+    let sanitized_repo = sanitize_string(repo);
+    let sanitized_digest = sanitize_string(digest);
+
+    let blob_path = format!(
+        "./tmp/blobs/{}/{}/{}",
+        sanitized_org, sanitized_repo, sanitized_digest
+    );
+    std::fs::read(blob_path)
+}
+
+pub(crate) fn blob_metadata(
+    org: &str,
+    repo: &str,
+    digest: &str,
+) -> Result<std::fs::Metadata, std::io::Error> {
+    let sanitized_org = sanitize_string(org);
+    let sanitized_repo = sanitize_string(repo);
+    let sanitized_digest = sanitize_string(digest);
+
+    let blob_path = format!(
+        "./tmp/blobs/{}/{}/{}",
+        sanitized_org, sanitized_repo, sanitized_digest
+    );
+    std::fs::metadata(blob_path)
 }

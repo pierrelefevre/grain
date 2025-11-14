@@ -32,7 +32,7 @@ pub(crate) async fn get_tags_list(
         query.n,
         query.last
     );
-    return Json(json!({
+    Json(json!({
         "not_implemented": format!("name {} n {:?} last {:?} server_status {}", name, query.n, query.last, status)
-    }));
+    }))
 }

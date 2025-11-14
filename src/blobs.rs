@@ -14,43 +14,128 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 use crate::{
-    response::{not_found, not_implemented},
-    state,
-    storage::write_blob,
+    auth, state,
+    storage::{self, write_blob},
 };
 use axum::{
     body::Body,
     extract::{Path, Query, State},
-    http::Request,
+    http::{HeaderMap, Request, StatusCode},
     response::{Json, Response},
 };
 
 // end-2 GET /v2/:name/blobs/:digest
 pub(crate) async fn get_blob_by_digest(
-    Path((org, repo, digest)): Path<(String, String, String)>,
-) -> Response<String> {
+    State(state): State<Arc<state::App>>,
+    Path((org, repo, digest_string)): Path<(String, String, String)>,
+    headers: HeaderMap,
+) -> Response<Body> {
     log::info!(
         "blobs/get_blob_by_digest: org: {}, repo {}, digest: {}",
         org,
         repo,
-        digest
+        digest_string
     );
 
-    return not_implemented();
+    let host = &state.args.host;
+
+    // Authenticate
+    if auth::get(State(state.clone()), headers).await.status() != StatusCode::OK {
+        return Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .header(
+                "WWW-Authenticate",
+                format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
+            )
+            .body(Body::from("401 Unauthorized"))
+            .unwrap();
+    }
+
+    // Strip sha256: prefix if present
+    let clean_digest = digest_string
+        .strip_prefix("sha256:")
+        .unwrap_or(&digest_string);
+
+    // Read blob from storage
+    match storage::read_blob(&org, &repo, clean_digest) {
+        Ok(blob_data) => Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Length", blob_data.len().to_string())
+            .header("Docker-Content-Digest", format!("sha256:{}", clean_digest))
+            .header("Content-Type", "application/octet-stream")
+            .body(Body::from(blob_data))
+            .unwrap(),
+        Err(e) => {
+            log::warn!(
+                "blobs/get_blob_by_digest: blob not found: {}/{}/{}: {}",
+                org,
+                repo,
+                clean_digest,
+                e
+            );
+            Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::from("404 Not Found"))
+                .unwrap()
+        }
+    }
 }
 
 // end-2 HEAD /v2/:name/blobs/:digest
 pub(crate) async fn head_blob_by_digest(
-    Path((org, repo, digest)): Path<(String, String, String)>,
-) -> Response<String> {
+    State(state): State<Arc<state::App>>,
+    Path((org, repo, digest_string)): Path<(String, String, String)>,
+    headers: HeaderMap,
+) -> Response<Body> {
     log::info!(
         "blobs/head_blob_by_digest: org: {}, repo {}, digest: {}",
         org,
         repo,
-        digest
+        digest_string
     );
 
-    return not_found();
+    let host = &state.args.host;
+
+    // Authenticate
+    if auth::get(State(state.clone()), headers).await.status() != StatusCode::OK {
+        return Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .header(
+                "WWW-Authenticate",
+                format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
+            )
+            .body(Body::empty())
+            .unwrap();
+    }
+
+    // Strip sha256: prefix if present
+    let clean_digest = digest_string
+        .strip_prefix("sha256:")
+        .unwrap_or(&digest_string);
+
+    // Check if blob exists and get metadata
+    match storage::blob_metadata(&org, &repo, clean_digest) {
+        Ok(metadata) => Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Length", metadata.len().to_string())
+            .header("Docker-Content-Digest", format!("sha256:{}", clean_digest))
+            .header("Content-Type", "application/octet-stream")
+            .body(Body::empty())
+            .unwrap(),
+        Err(e) => {
+            log::warn!(
+                "blobs/head_blob_by_digest: blob not found: {}/{}/{}: {}",
+                org,
+                repo,
+                clean_digest,
+                e
+            );
+            Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::empty())
+                .unwrap()
+        }
+    }
 }
 
 // end-4a POST /v2/:name/blobs/uploads/
@@ -68,11 +153,11 @@ pub(crate) async fn post_blob_upload(
 ) -> Response<String> {
     log::info!("blobs/post_blob_upload: org: {}, repo: {}", org, repo,);
 
-    return Response::builder()
+    Response::builder()
         .status(202)
         .header("Location", format!("/v2/{}/{}/blobs/uploads/", org, repo))
         .body("202 Accepted".to_string())
-        .unwrap();
+        .expect("Failed to build response")
 }
 
 pub(crate) async fn put_blob_upload(
@@ -90,7 +175,7 @@ pub(crate) async fn put_blob_upload(
     );
 
     let success = match &query.digest {
-        Some(digest) => write_blob(&org, &repo, &digest, body.into_body()).await,
+        Some(digest) => write_blob(&org, &repo, digest, body.into_body()).await,
         None => false,
     };
 
@@ -98,15 +183,18 @@ pub(crate) async fn put_blob_upload(
         return Response::builder()
             .status(400)
             .body("400 Bad Request".to_string())
-            .unwrap();
+            .expect("Failed to build response");
     }
 
-    return Response::builder()
+    Response::builder()
         .status(201)
         .header("Location", format!("/v2/{}/blobs/uploads/{}", org, repo))
-        .header("Docker-Content-Digest", query.digest.as_ref().unwrap())
+        .header(
+            "Docker-Content-Digest",
+            query.digest.as_ref().expect("Digest should exist"),
+        )
         .body("201 Created".to_string())
-        .unwrap();
+        .expect("Failed to build response")
 }
 
 // end-5 PATCH /v2/:name/blobs/uploads/:reference
@@ -121,9 +209,9 @@ pub(crate) async fn patch_blob_upload(
         name,
         reference
     );
-    return Json(json!({
+    Json(json!({
         "not_implemented": format!("name {} reference {} server_status {}", name, reference, status)
-    }));
+    }))
 }
 
 // end-6 PUT /v2/:name/blobs/uploads/:reference?digest=:digest
@@ -144,9 +232,9 @@ pub(crate) async fn put_blob_upload_by_reference(
         reference,
         query.digest
     );
-    return Json(json!({
+    Json(json!({
         "not_implemented": format!("name {} reference {} digest {} server_status {}", name, reference, query.digest, status)
-    }));
+    }))
 }
 
 // end-10 DELETE /v2/:name/blobs/:digest
@@ -161,7 +249,7 @@ pub(crate) async fn delete_blob_by_digest(
         name,
         digest
     );
-    return Json(json!({
+    Json(json!({
         "not_implemented": format!("name {} digest {} server_status {}", name, digest, status)
-    }));
+    }))
 }

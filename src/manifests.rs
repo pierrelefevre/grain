@@ -31,9 +31,9 @@ pub(crate) async fn get_manifest_by_reference(
         repo,
         reference
     );
-    return Json(json!({
+    Json(json!({
         "not_implemented": format!("org {} repo {} reference {} server_status {}", org, repo, reference, status)
-    }));
+    }))
 }
 
 // end-3 HEAD /v2/:name/manifests/:reference
@@ -47,7 +47,7 @@ pub(crate) async fn head_manifest_by_reference(
         reference
     );
 
-    return not_found();
+    not_found()
 }
 
 // end-7 PUT /v2/:name/manifests/:reference
@@ -68,17 +68,17 @@ pub(crate) async fn put_manifest_by_reference(
         return Response::builder()
             .status(400)
             .body("400 Bad Request".to_string())
-            .unwrap();
+            .expect("Failed to build response");
     }
 
-    return Response::builder()
+    Response::builder()
         .status(201)
         .header(
             "Location",
             format!("/v2/{}/{}/manifests/{}", org, repo, reference),
         )
         .body("201 Created".to_string())
-        .unwrap();
+        .expect("Failed to build response")
 }
 
 // end-9 DELETE /v2/:name/manifests/:reference
@@ -91,5 +91,5 @@ pub(crate) async fn delete_manifest_by_reference(
         name,
         reference
     );
-    return not_implemented();
+    not_implemented()
 }
