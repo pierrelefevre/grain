@@ -150,3 +150,34 @@ pub(crate) fn manifest_exists(org: &str, repo: &str, reference: &str) -> bool {
     );
     std::path::Path::new(&manifest_path).exists()
 }
+
+pub(crate) fn list_tags(org: &str, repo: &str) -> Result<Vec<String>, std::io::Error> {
+    let sanitized_org = sanitize_string(org);
+    let sanitized_repo = sanitize_string(repo);
+
+    let manifests_dir = format!("./tmp/manifests/{}/{}", sanitized_org, sanitized_repo);
+    let path = std::path::Path::new(&manifests_dir);
+
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut tags = Vec::new();
+
+    for entry in std::fs::read_dir(path)? {
+        let entry = entry?;
+        if entry.path().is_file() {
+            if let Some(filename) = entry.file_name().to_str() {
+                // Filter out digest references (start with sha256:)
+                // Only include tag names
+                if !filename.starts_with("sha256:") {
+                    tags.push(filename.to_string());
+                }
+            }
+        }
+    }
+
+    // Sort tags alphabetically for consistent ordering
+    tags.sort();
+    Ok(tags)
+}

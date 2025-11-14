@@ -3,36 +3,98 @@
 // | end-8a | `GET`          | `/v2/<name>/tags/list`                                       | `200`       | `404`             |
 // | end-8b | `GET`          | `/v2/<name>/tags/list?n=<integer>&last=<integer>`            | `200`       | `404`             |
 
+use axum::body::Body;
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::Response;
 use serde::Deserialize;
-use serde_json::{json, Value};
 use std::sync::Arc;
 
-use crate::state;
-use axum::{
-    extract::{Path, Query, State},
-    response::Json,
-};
+use crate::{auth, state, storage};
+use axum::extract::{Path, Query, State};
 
 // end-8a GET /v2/:name/tags/list
 // end-8b GET /v2/:name/tags/list?n=<integer>&last=<integer>
 #[derive(Deserialize)]
-pub(crate) struct End8bQueryParams {
-    n: String,
-    last: String,
+pub(crate) struct TagsQuery {
+    pub n: Option<usize>,
+    pub last: Option<String>,
 }
+
+fn paginate_tags(tags: Vec<String>, n: Option<usize>, last: Option<String>) -> Vec<String> {
+    let mut result = tags;
+
+    // Filter tags after 'last' cursor
+    if let Some(last_tag) = last {
+        result = result
+            .into_iter()
+            .skip_while(|tag| tag <= &last_tag)
+            .collect();
+    }
+
+    // Limit to 'n' results
+    if let Some(limit) = n {
+        result.truncate(limit);
+    }
+
+    result
+}
+
 pub(crate) async fn get_tags_list(
-    State(data): State<Arc<state::App>>,
-    Path(name): Path<String>,
-    query: Query<End8bQueryParams>,
-) -> Json<Value> {
-    let status = data.server_status.lock().await;
-    log::info!(
-        "tags/get_tags_list: name: {}, n: {}, last: {}",
-        name,
-        query.n,
-        query.last
-    );
-    Json(json!({
-        "not_implemented": format!("name {} n {:?} last {:?} server_status {}", name, query.n, query.last, status)
-    }))
+    State(state): State<Arc<state::App>>,
+    Path((org, repo)): Path<(String, String)>,
+    Query(params): Query<TagsQuery>,
+    headers: HeaderMap,
+) -> Response<Body> {
+    let host = &state.args.host;
+
+    // Authenticate
+    if auth::get(State(state.clone()), headers.clone())
+        .await
+        .status()
+        != StatusCode::OK
+    {
+        return Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .header(
+                "WWW-Authenticate",
+                format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
+            )
+            .body(Body::from("401 Unauthorized"))
+            .unwrap();
+    }
+
+    // Get all tags from storage
+    match storage::list_tags(&org, &repo) {
+        Ok(all_tags) => {
+            // Apply pagination
+            let paginated_tags = paginate_tags(all_tags, params.n, params.last);
+
+            // Build response JSON
+            let response_body = serde_json::json!({
+                "name": format!("{}/{}", org, repo),
+                "tags": paginated_tags
+            });
+
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "application/json")
+                .body(Body::from(response_body.to_string()))
+                .unwrap()
+        }
+        Err(e) => {
+            log::error!("Failed to list tags for {}/{}: {}", org, repo, e);
+
+            // Return empty list if directory doesn't exist (valid case)
+            let response_body = serde_json::json!({
+                "name": format!("{}/{}", org, repo),
+                "tags": []
+            });
+
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "application/json")
+                .body(Body::from(response_body.to_string()))
+                .unwrap()
+        }
+    }
 }
