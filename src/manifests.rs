@@ -4,50 +4,155 @@
 // | end-7  | `PUT`          | `/v2/<name>/manifests/<reference>`                           | `201`       | `404`             |
 // | end-9  | `DELETE`       | `/v2/<name>/manifests/<reference>`                           | `202`       | `404`/`400`/`405` |
 
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::sync::Arc;
 
-use crate::{
-    response::{not_found, not_implemented},
-    state,
-    storage::write_manifest,
-};
+use crate::{auth, state, storage};
 use axum::{
     body::Body,
     extract::{Path, State},
-    http::Request,
-    response::{Json, Response},
+    http::{HeaderMap, Request, StatusCode},
+    response::Response,
 };
+
+fn detect_manifest_content_type(manifest_data: &[u8]) -> String {
+    if let Ok(json_str) = std::str::from_utf8(manifest_data) {
+        if let Ok(parsed) = serde_json::from_str::<Value>(json_str) {
+            if let Some(media_type) = parsed.get("mediaType").and_then(|v| v.as_str()) {
+                return media_type.to_string();
+            }
+        }
+    }
+    "application/vnd.oci.image.manifest.v1+json".to_string()
+}
 
 // end-3 GET /v2/:name/manifests/:reference
 pub(crate) async fn get_manifest_by_reference(
-    State(data): State<Arc<state::App>>,
+    State(state): State<Arc<state::App>>,
     Path((org, repo, reference)): Path<(String, String, String)>,
-) -> Json<Value> {
-    let status = data.server_status.lock().await;
+    headers: HeaderMap,
+) -> Response<Body> {
+    let host = &state.args.host;
+
+    if auth::get(State(state.clone()), headers.clone())
+        .await
+        .status()
+        != StatusCode::OK
+    {
+        return Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .header(
+                "WWW-Authenticate",
+                format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
+            )
+            .body(Body::from("401 Unauthorized"))
+            .unwrap();
+    }
+
+    let clean_reference = reference.strip_prefix("sha256:").unwrap_or(&reference);
+
     log::info!(
         "manifests/get_manifest_by_reference: org: {}, repo: {}, reference: {}",
         org,
         repo,
-        reference
+        clean_reference
     );
-    Json(json!({
-        "not_implemented": format!("org {} repo {} reference {} server_status {}", org, repo, reference, status)
-    }))
+
+    match storage::read_manifest(&org, &repo, clean_reference) {
+        Ok(manifest_data) => {
+            let digest = sha256::digest(&manifest_data);
+            let content_type = detect_manifest_content_type(&manifest_data);
+
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Length", manifest_data.len().to_string())
+                .header("Content-Type", content_type)
+                .header("Docker-Content-Digest", format!("sha256:{}", digest))
+                .body(Body::from(manifest_data))
+                .unwrap()
+        }
+        Err(e) => {
+            log::error!(
+                "Failed to read manifest {}/{}/{}: {}",
+                org,
+                repo,
+                clean_reference,
+                e
+            );
+            Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::from("404 Not Found"))
+                .unwrap()
+        }
+    }
 }
 
 // end-3 HEAD /v2/:name/manifests/:reference
 pub(crate) async fn head_manifest_by_reference(
+    State(state): State<Arc<state::App>>,
     Path((org, repo, reference)): Path<(String, String, String)>,
-) -> Response<String> {
+    headers: HeaderMap,
+) -> Response<Body> {
+    let host = &state.args.host;
+
+    if auth::get(State(state.clone()), headers.clone())
+        .await
+        .status()
+        != StatusCode::OK
+    {
+        return Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .header(
+                "WWW-Authenticate",
+                format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
+            )
+            .body(Body::from("401 Unauthorized"))
+            .unwrap();
+    }
+
+    let clean_reference = reference.strip_prefix("sha256:").unwrap_or(&reference);
+
     log::info!(
         "manifests/head_manifest_by_reference: org: {}, repo: {}, reference: {}",
         org,
         repo,
-        reference
+        clean_reference
     );
 
-    not_found()
+    if !storage::manifest_exists(&org, &repo, clean_reference) {
+        return Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from("404 Not Found"))
+            .unwrap();
+    }
+
+    match storage::read_manifest(&org, &repo, clean_reference) {
+        Ok(manifest_data) => {
+            let digest = sha256::digest(&manifest_data);
+            let content_type = detect_manifest_content_type(&manifest_data);
+
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Length", manifest_data.len().to_string())
+                .header("Content-Type", content_type)
+                .header("Docker-Content-Digest", format!("sha256:{}", digest))
+                .body(Body::empty())
+                .unwrap()
+        }
+        Err(e) => {
+            log::error!(
+                "Failed to read manifest {}/{}/{}: {}",
+                org,
+                repo,
+                clean_reference,
+                e
+            );
+            Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::from("404 Not Found"))
+                .unwrap()
+        }
+    }
 }
 
 // end-7 PUT /v2/:name/manifests/:reference
@@ -55,7 +160,7 @@ pub(crate) async fn head_manifest_by_reference(
 pub(crate) async fn put_manifest_by_reference(
     Path((org, repo, reference)): Path<(String, String, String)>,
     body: Request<Body>,
-) -> Response<String> {
+) -> Response {
     log::info!(
         "manifests/put_manifest_by_reference: org: {}, repo: {}, reference: {}",
         org,
@@ -63,11 +168,11 @@ pub(crate) async fn put_manifest_by_reference(
         reference
     );
 
-    let success = write_manifest(&org, &repo, &reference, body.into_body()).await;
+    let success = storage::write_manifest(&org, &repo, &reference, body.into_body()).await;
     if !success {
         return Response::builder()
             .status(400)
-            .body("400 Bad Request".to_string())
+            .body(Body::from("400 Bad Request"))
             .expect("Failed to build response");
     }
 
@@ -77,7 +182,7 @@ pub(crate) async fn put_manifest_by_reference(
             "Location",
             format!("/v2/{}/{}/manifests/{}", org, repo, reference),
         )
-        .body("201 Created".to_string())
+        .body(Body::empty())
         .expect("Failed to build response")
 }
 
@@ -85,11 +190,14 @@ pub(crate) async fn put_manifest_by_reference(
 pub(crate) async fn delete_manifest_by_reference(
     Path(name): Path<String>,
     Path(reference): Path<String>,
-) -> Response<String> {
+) -> Response<Body> {
     log::info!(
         "manifests/delete_manifest_by_reference: name: {}, reference: {}",
         name,
         reference
     );
-    not_implemented()
+    Response::builder()
+        .status(StatusCode::NOT_IMPLEMENTED)
+        .body(Body::from("501 Not Implemented"))
+        .unwrap()
 }

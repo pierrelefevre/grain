@@ -122,3 +122,31 @@ pub(crate) fn blob_metadata(
     );
     std::fs::metadata(blob_path)
 }
+
+pub(crate) fn read_manifest(
+    org: &str,
+    repo: &str,
+    reference: &str,
+) -> Result<Vec<u8>, std::io::Error> {
+    let sanitized_org = sanitize_string(org);
+    let sanitized_repo = sanitize_string(repo);
+    let sanitized_reference = sanitize_string(reference);
+
+    let manifest_path = format!(
+        "./tmp/manifests/{}/{}/{}",
+        sanitized_org, sanitized_repo, sanitized_reference
+    );
+    std::fs::read(manifest_path)
+}
+
+pub(crate) fn manifest_exists(org: &str, repo: &str, reference: &str) -> bool {
+    let sanitized_org = sanitize_string(org);
+    let sanitized_repo = sanitize_string(repo);
+    let sanitized_reference = sanitize_string(reference);
+
+    let manifest_path = format!(
+        "./tmp/manifests/{}/{}/{}",
+        sanitized_org, sanitized_repo, sanitized_reference
+    );
+    std::path::Path::new(&manifest_path).exists()
+}
