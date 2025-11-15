@@ -1,6 +1,62 @@
 # pierrelefevre/grain
 Rust implementation of OCI Distribution Spec with granular access control
 
+## Installation
+
+### Using Docker
+
+```bash
+docker pull ghcr.io/pierrelefevre/grain:latest
+docker run -p 8888:8888 -v $(pwd)/data:/data ghcr.io/pierrelefevre/grain:latest
+```
+
+See [docs/deployment.md](docs/deployment.md) for complete deployment guide.
+
+### Using Docker Compose
+
+```bash
+# Download docker-compose.yml from repository
+docker-compose up -d
+```
+
+### From Source
+
+```bash
+git clone https://github.com/pierrelefevre/grain.git
+cd grain
+cargo build --release
+./target/release/grain --host 0.0.0.0:8888 --users-file ./data/users.json
+```
+
+## Quick Start
+
+1. Create a `data/users.json` file:
+```json
+{
+  "users": [
+    {
+      "username": "admin",
+      "password": "admin",
+      "permissions": [
+        {"repository": "*", "tag": "*", "actions": ["pull", "push", "delete"]}
+      ]
+    }
+  ]
+}
+```
+
+2. Run the registry:
+```bash
+docker run -p 8888:8888 -v $(pwd)/data:/data ghcr.io/pierrelefevre/grain:latest
+```
+
+3. Use with Docker:
+```bash
+docker login localhost:8888
+docker tag alpine:latest localhost:8888/myorg/alpine:latest
+docker push localhost:8888/myorg/alpine:latest
+```
+
 ## Goals
 - Implement the OCI Distribution Spec in Rust
 - Use local filesystem for storage

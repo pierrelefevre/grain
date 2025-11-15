@@ -1,0 +1,33 @@
+# Build artifacts
+target/
+debug/
+release/
+
+# Development files
+.git/
+.github/
+.gitignore
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation
+*.md
+!README.md
+plans/
+docs/
+
+# Test/temporary data
+tmp/
+test-data/
+*.log
+
+# Environment files
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
