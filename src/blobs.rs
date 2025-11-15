@@ -13,7 +13,7 @@ use serde::Deserialize;
 use std::sync::Arc;
 
 use crate::{
-    auth, permissions, response, state,
+    auth, metrics, permissions, response, state,
     storage::{self, write_blob},
 };
 use axum::{
@@ -67,13 +67,16 @@ pub(crate) async fn get_blob_by_digest(
 
     // Read blob from storage
     match storage::read_blob(&org, &repo, clean_digest) {
-        Ok(blob_data) => Response::builder()
-            .status(StatusCode::OK)
-            .header("Content-Length", blob_data.len().to_string())
-            .header("Docker-Content-Digest", format!("sha256:{}", clean_digest))
-            .header("Content-Type", "application/octet-stream")
-            .body(Body::from(blob_data))
-            .unwrap(),
+        Ok(blob_data) => {
+            metrics::BLOB_DOWNLOADS_TOTAL.inc();
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Length", blob_data.len().to_string())
+                .header("Docker-Content-Digest", format!("sha256:{}", clean_digest))
+                .header("Content-Type", "application/octet-stream")
+                .body(Body::from(blob_data))
+                .unwrap()
+        }
         Err(e) => {
             log::warn!(
                 "blobs/get_blob_by_digest: blob not found: {}/{}/{}: {}",
@@ -270,6 +273,8 @@ pub(crate) async fn post_blob_upload(
             return response::digest_invalid(&digest_string);
         }
 
+        metrics::BLOB_UPLOADS_TOTAL.inc();
+
         let clean_digest = digest_string
             .strip_prefix("sha256:")
             .unwrap_or(&digest_string);
@@ -418,6 +423,8 @@ pub(crate) async fn put_blob_upload_by_reference(
     // Finalize upload and validate digest
     match storage::finalize_upload(&org, &repo, &uuid, &params.digest) {
         Ok(actual_digest) => {
+            metrics::BLOB_UPLOADS_TOTAL.inc();
+
             let location = format!(
                 "http://{}/v2/{}/{}/blobs/sha256:{}",
                 host, org, repo, actual_digest

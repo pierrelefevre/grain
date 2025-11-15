@@ -1,6 +1,7 @@
 use base64::{prelude::BASE64_STANDARD, Engine};
 use std::sync::Arc;
 
+use crate::metrics;
 use crate::permissions::{has_permission, Action};
 use crate::response::unauthorized;
 use crate::state::{self, User};
@@ -41,6 +42,7 @@ pub async fn authenticate_user(state: &Arc<state::App>, headers: &HeaderMap) -> 
         }
     }
 
+    metrics::AUTH_FAILURES_TOTAL.inc();
     Err(())
 }
 
@@ -66,6 +68,7 @@ pub async fn check_permission(
             repository,
             tag.unwrap_or("*")
         );
+        metrics::PERMISSION_DENIALS_TOTAL.inc();
         Err(())
     }
 }

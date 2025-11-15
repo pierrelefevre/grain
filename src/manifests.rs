@@ -7,7 +7,7 @@
 use serde_json::Value;
 use std::sync::Arc;
 
-use crate::{auth, permissions, response, state, storage, validation};
+use crate::{auth, metrics, permissions, response, state, storage, validation};
 use axum::{
     body::Body,
     extract::{Path, State},
@@ -53,6 +53,8 @@ pub(crate) async fn get_manifest_by_reference(
 
     match storage::read_manifest(&org, &repo, clean_reference) {
         Ok(manifest_data) => {
+            metrics::MANIFEST_DOWNLOADS_TOTAL.inc();
+
             let digest = sha256::digest(&manifest_data);
             let content_type = detect_manifest_content_type(&manifest_data);
 
@@ -208,6 +210,8 @@ pub(crate) async fn put_manifest_by_reference(
     if !success {
         return response::manifest_invalid("failed to write manifest");
     }
+
+    metrics::MANIFEST_UPLOADS_TOTAL.inc();
 
     Response::builder()
         .status(201)

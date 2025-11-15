@@ -34,6 +34,7 @@ A production-ready, lightweight OCI registry server featuring:
 - ✅ Manifest validation (OCI/Docker schemas)
 - ✅ Docker image publishing to GHCR
 - ✅ Garbage collection (unreferenced blob cleanup)
+- ✅ Health & Metrics (Prometheus, liveness/readiness probes)
 
 ## Architecture
 
@@ -62,6 +63,9 @@ src/
 ├── validation.rs - Manifest schema validation (OCI/Docker)
 ├── errors.rs     - OCI-compliant error response structures
 ├── gc.rs         - Garbage collection for unreferenced blobs
+├── health.rs     - Health check endpoints (liveness, readiness, detailed health)
+├── metrics.rs    - Prometheus metrics collection and exposition
+├── middleware.rs - Request tracking middleware for metrics
 ├── meta.rs       - Index and catch-all routes
 ├── utils.rs      - Build version helper
 └── bin/
@@ -218,7 +222,7 @@ Scan `./tmp/manifests/{org}/{repo}/` directory:
 None
 
 ### Medium Priority
-1. **Metrics/Health** - Prometheus metrics, health check endpoint
+None
 
 ### Low Priority
 1. **TLS Support** - HTTPS configuration

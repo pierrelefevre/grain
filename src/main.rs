@@ -15,8 +15,11 @@ mod auth;
 mod blobs;
 mod errors;
 mod gc;
+mod health;
 mod manifests;
 mod meta;
+mod metrics;
+mod middleware;
 mod openapi;
 mod permissions;
 mod response;
@@ -37,6 +40,12 @@ async fn main() {
 
     let app = Router::new()
         .route("/", get(meta::index)) // Index, info
+        // Health endpoints (no auth required)
+        .route("/health", get(health::health))
+        .route("/health/live", get(health::liveness))
+        .route("/health/ready", get(health::readiness))
+        // Metrics endpoint (no auth for Prometheus scraping)
+        .route("/metrics", get(metrics::metrics))
         .route("/v2/", get(auth::get)) // end-1
         .route(
             "/v2/{org}/{repo}/manifests/{reference}",
@@ -96,6 +105,7 @@ async fn main() {
         .route("/{*path}", patch(meta::catch_all_patch))
         .route("/{*path}", delete(meta::catch_all_delete))
         .with_state(shared_state)
+        .layer(axum::middleware::from_fn(middleware::track_metrics))
         .layer(CorsLayer::permissive())
         .merge(
             SwaggerUi::new("/swagger-ui")
