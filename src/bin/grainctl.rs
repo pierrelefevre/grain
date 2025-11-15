@@ -19,6 +19,24 @@ enum Commands {
         #[command(subcommand)]
         command: UserCommands,
     },
+
+    /// Run garbage collection
+    Gc {
+        #[arg(long, default_value = "false")]
+        dry_run: bool,
+
+        #[arg(long, default_value = "24")]
+        grace_period_hours: u64,
+
+        #[arg(long, env = "GRAIN_URL")]
+        url: String,
+
+        #[arg(long, env = "GRAIN_ADMIN_USER")]
+        username: String,
+
+        #[arg(long, env = "GRAIN_ADMIN_PASSWORD")]
+        password: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -109,6 +127,13 @@ fn main() {
 fn execute_command(cmd: &Commands) -> Result<(), Box<dyn std::error::Error>> {
     match cmd {
         Commands::User { command } => execute_user_command(command),
+        Commands::Gc {
+            dry_run,
+            grace_period_hours,
+            url,
+            username,
+            password,
+        } => execute_gc_command(*dry_run, *grace_period_hours, url, username, password),
     }
 }
 
@@ -232,4 +257,34 @@ fn execute_user_command(cmd: &UserCommands) -> Result<(), Box<dyn std::error::Er
             Ok(())
         }
     }
+}
+
+fn execute_gc_command(
+    dry_run: bool,
+    grace_period_hours: u64,
+    url: &str,
+    username: &str,
+    password: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let client = Client::new();
+
+    let response = client
+        .post(format!(
+            "{}/admin/gc?dry_run={}&grace_period_hours={}",
+            url, dry_run, grace_period_hours
+        ))
+        .basic_auth(username, Some(password))
+        .send()?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response
+            .text()
+            .unwrap_or_else(|_| String::from("No response body"));
+        return Err(format!("{} - {}", status, text).into());
+    }
+
+    let stats: serde_json::Value = response.json()?;
+    println!("{}", serde_json::to_string_pretty(&stats)?);
+    Ok(())
 }

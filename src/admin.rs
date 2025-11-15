@@ -1,6 +1,6 @@
 use axum::{
     body::Body,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::Response,
 };
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::ToSchema;
 
-use crate::{auth, permissions, response, state};
+use crate::{auth, gc, permissions, response, state};
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct CreateUserRequest {
@@ -346,4 +346,75 @@ async fn save_users(state: &Arc<state::App>) -> Result<(), Box<dyn std::error::E
     std::fs::write(&state.args.users_file, json)?;
 
     Ok(())
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct GcQuery {
+    #[serde(default)]
+    pub dry_run: bool,
+    #[serde(default = "default_grace_period")]
+    pub grace_period_hours: u64,
+}
+
+fn default_grace_period() -> u64 {
+    24
+}
+
+/// Run garbage collection (admin only)
+#[utoipa::path(
+    post,
+    path = "/admin/gc",
+    params(
+        ("dry_run" = Option<bool>, Query, description = "Run in dry-run mode without deleting blobs"),
+        ("grace_period_hours" = Option<u64>, Query, description = "Grace period in hours before deleting unreferenced blobs (default: 24)")
+    ),
+    responses(
+        (status = 200, description = "Garbage collection statistics", content_type = "application/json"),
+        (status = 401, description = "Unauthorized - authentication required"),
+        (status = 403, description = "Forbidden - admin permission required"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("basic_auth" = [])
+    )
+)]
+pub async fn run_garbage_collection(
+    State(state): State<Arc<state::App>>,
+    headers: HeaderMap,
+    Query(params): Query<GcQuery>,
+) -> Response {
+    let host = &state.args.host;
+
+    // Authenticate
+    let user = match auth::authenticate_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(_) => return response::unauthorized(host),
+    };
+
+    // Check admin permission
+    if !is_admin(&user) {
+        return response::forbidden();
+    }
+
+    let dry_run = params.dry_run;
+    let grace_period = params.grace_period_hours;
+
+    log::info!(
+        "Admin {} initiated GC (dry_run: {}, grace_period: {}h)",
+        user.username,
+        dry_run,
+        grace_period
+    );
+
+    match gc::run_gc(dry_run, grace_period) {
+        Ok(stats) => Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_string_pretty(&stats).unwrap()))
+            .unwrap(),
+        Err(e) => {
+            log::error!("GC failed: {}", e);
+            response::internal_error()
+        }
+    }
 }

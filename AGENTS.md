@@ -33,6 +33,7 @@ A production-ready, lightweight OCI registry server featuring:
 - ✅ OCI-compliant error responses
 - ✅ Manifest validation (OCI/Docker schemas)
 - ✅ Docker image publishing to GHCR
+- ✅ Garbage collection (unreferenced blob cleanup)
 
 ## Architecture
 
@@ -60,6 +61,7 @@ src/
 ├── permissions.rs - Permission checking logic
 ├── validation.rs - Manifest schema validation (OCI/Docker)
 ├── errors.rs     - OCI-compliant error response structures
+├── gc.rs         - Garbage collection for unreferenced blobs
 ├── meta.rs       - Index and catch-all routes
 ├── utils.rs      - Build version helper
 └── bin/
@@ -216,8 +218,7 @@ Scan `./tmp/manifests/{org}/{repo}/` directory:
 None
 
 ### Medium Priority
-1. **Garbage Collection** - Clean up unreferenced blobs
-2. **Metrics/Health** - Prometheus metrics, health check endpoint
+1. **Metrics/Health** - Prometheus metrics, health check endpoint
 
 ### Low Priority
 1. **TLS Support** - HTTPS configuration
@@ -252,6 +253,20 @@ None
 2. Add `permissions: HashMap<String, Vec<String>>` (tag → allowed operations)
 3. Create middleware to check permissions before blob/manifest operations
 4. Update `users.json` schema to include permissions
+
+### Run Garbage Collection
+1. Use grainctl CLI tool:
+   ```bash
+   grainctl gc --dry-run --grace-period-hours 24 \
+     --url http://localhost:8888 --username admin --password admin
+   ```
+2. Or call admin API directly:
+   ```bash
+   curl -u admin:admin -X POST \
+     "http://localhost:8888/admin/gc?dry_run=false&grace_period_hours=24"
+   ```
+3. Review statistics (blobs_scanned, blobs_deleted, bytes_freed)
+4. Use grace period to avoid race conditions with concurrent uploads
 
 ## Debugging Tips
 

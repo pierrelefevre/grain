@@ -14,6 +14,7 @@ mod args;
 mod auth;
 mod blobs;
 mod errors;
+mod gc;
 mod manifests;
 mod meta;
 mod openapi;
@@ -86,6 +87,7 @@ async fn main() {
             "/admin/users/{username}/permissions",
             post(admin::add_permission),
         )
+        .route("/admin/gc", post(admin::run_garbage_collection))
         // Catch-all routes for debugging
         .route("/{*path}", head(meta::catch_all_head))
         .route("/{*path}", get(meta::catch_all_get))
