@@ -181,3 +181,97 @@ pub(crate) fn list_tags(org: &str, repo: &str) -> Result<Vec<String>, std::io::E
     tags.sort();
     Ok(tags)
 }
+
+pub(crate) fn init_upload_session(org: &str, repo: &str, uuid: &str) -> Result<(), std::io::Error> {
+    let sanitized_org = sanitize_string(org);
+    let sanitized_repo = sanitize_string(repo);
+    let sanitized_uuid = sanitize_string(uuid);
+
+    let upload_dir = format!("./tmp/uploads/{}/{}", sanitized_org, sanitized_repo);
+    std::fs::create_dir_all(&upload_dir)?;
+
+    let upload_path = format!("{}/{}", upload_dir, sanitized_uuid);
+    std::fs::File::create(upload_path)?;
+    Ok(())
+}
+
+pub(crate) fn append_upload_chunk(
+    org: &str,
+    repo: &str,
+    uuid: &str,
+    chunk_data: &[u8],
+) -> Result<u64, std::io::Error> {
+    use std::fs::OpenOptions;
+
+    let sanitized_org = sanitize_string(org);
+    let sanitized_repo = sanitize_string(repo);
+    let sanitized_uuid = sanitize_string(uuid);
+
+    let upload_path = format!(
+        "./tmp/uploads/{}/{}/{}",
+        sanitized_org, sanitized_repo, sanitized_uuid
+    );
+
+    let mut file = OpenOptions::new().append(true).open(&upload_path)?;
+
+    file.write_all(chunk_data)?;
+
+    let metadata = std::fs::metadata(&upload_path)?;
+    Ok(metadata.len())
+}
+
+pub(crate) fn finalize_upload(
+    org: &str,
+    repo: &str,
+    uuid: &str,
+    expected_digest: &str,
+) -> Result<String, String> {
+    let sanitized_org = sanitize_string(org);
+    let sanitized_repo = sanitize_string(repo);
+    let sanitized_uuid = sanitize_string(uuid);
+
+    let upload_path = format!(
+        "./tmp/uploads/{}/{}/{}",
+        sanitized_org, sanitized_repo, sanitized_uuid
+    );
+
+    let upload_data =
+        std::fs::read(&upload_path).map_err(|e| format!("Failed to read upload: {}", e))?;
+
+    let actual_digest = sha256::digest(&upload_data);
+    let clean_expected = expected_digest
+        .strip_prefix("sha256:")
+        .unwrap_or(expected_digest);
+
+    if actual_digest != clean_expected {
+        return Err(format!(
+            "Digest mismatch: expected {}, got {}",
+            clean_expected, actual_digest
+        ));
+    }
+
+    let blob_dir = format!("./tmp/blobs/{}/{}", sanitized_org, sanitized_repo);
+    std::fs::create_dir_all(&blob_dir).map_err(|e| format!("Failed to create blob dir: {}", e))?;
+
+    let blob_path = format!("{}/{}", blob_dir, actual_digest);
+    std::fs::rename(&upload_path, &blob_path)
+        .map_err(|e| format!("Failed to move upload to blob: {}", e))?;
+
+    Ok(actual_digest)
+}
+
+pub(crate) fn delete_upload_session(
+    org: &str,
+    repo: &str,
+    uuid: &str,
+) -> Result<(), std::io::Error> {
+    let sanitized_org = sanitize_string(org);
+    let sanitized_repo = sanitize_string(repo);
+    let sanitized_uuid = sanitize_string(uuid);
+
+    let upload_path = format!(
+        "./tmp/uploads/{}/{}/{}",
+        sanitized_org, sanitized_repo, sanitized_uuid
+    );
+    std::fs::remove_file(upload_path)
+}

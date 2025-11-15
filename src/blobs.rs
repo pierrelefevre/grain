@@ -14,15 +14,16 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 use crate::{
-    auth, state,
+    auth, response, state,
     storage::{self, write_blob},
 };
 use axum::{
     body::Body,
     extract::{Path, Query, State},
-    http::{HeaderMap, Request, StatusCode},
+    http::{HeaderMap, StatusCode},
     response::{Json, Response},
 };
+use bytes::Bytes;
 
 // end-2 GET /v2/:name/blobs/:digest
 pub(crate) async fn get_blob_by_digest(
@@ -144,74 +145,133 @@ pub(crate) async fn head_blob_by_digest(
 #[derive(Deserialize)]
 pub(crate) struct PostBlobUploadQueryParams {
     digest: Option<String>,
+    #[allow(dead_code)]
     mount: Option<String>,
+    #[allow(dead_code)]
     from: Option<String>,
 }
 
 pub(crate) async fn post_blob_upload(
+    State(state): State<Arc<state::App>>,
     Path((org, repo)): Path<(String, String)>,
-) -> Response<String> {
-    log::info!("blobs/post_blob_upload: org: {}, repo: {}", org, repo,);
+    Query(params): Query<PostBlobUploadQueryParams>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response<Body> {
+    log::info!("blobs/post_blob_upload: org: {}, repo: {}", org, repo);
 
-    Response::builder()
-        .status(202)
-        .header("Location", format!("/v2/{}/{}/blobs/uploads/", org, repo))
-        .body("202 Accepted".to_string())
-        .expect("Failed to build response")
-}
+    let host = &state.args.host;
 
-pub(crate) async fn put_blob_upload(
-    Path((org, repo)): Path<(String, String)>,
-    query: Query<PostBlobUploadQueryParams>,
-    body: Request<Body>,
-) -> Response<String> {
-    log::info!(
-        "blobs/put_blob_upload: org: {}, repo: {}, digest: {:#?}, mount: {:#?}, from: {:#?}",
-        org,
-        repo,
-        query.digest,
-        query.mount,
-        query.from
-    );
-
-    let success = match &query.digest {
-        Some(digest) => write_blob(&org, &repo, digest, body.into_body()).await,
-        None => false,
-    };
-
-    if !success {
+    if auth::get(State(state.clone()), headers.clone())
+        .await
+        .status()
+        != StatusCode::OK
+    {
         return Response::builder()
-            .status(400)
-            .body("400 Bad Request".to_string())
-            .expect("Failed to build response");
+            .status(StatusCode::UNAUTHORIZED)
+            .header(
+                "WWW-Authenticate",
+                format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
+            )
+            .body(Body::from("401 Unauthorized"))
+            .unwrap();
     }
 
+    // If digest is provided, handle monolithic upload (end-4b)
+    if let Some(digest_string) = params.digest {
+        let success = write_blob(&org, &repo, &digest_string, Body::from(body)).await;
+
+        if !success {
+            return Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Body::from("Digest mismatch or write failed"))
+                .unwrap();
+        }
+
+        let clean_digest = digest_string
+            .strip_prefix("sha256:")
+            .unwrap_or(&digest_string);
+
+        return Response::builder()
+            .status(StatusCode::CREATED)
+            .header(
+                "Location",
+                format!(
+                    "http://{}/v2/{}/{}/blobs/sha256:{}",
+                    host, org, repo, clean_digest
+                ),
+            )
+            .header("Docker-Content-Digest", format!("sha256:{}", clean_digest))
+            .body(Body::empty())
+            .unwrap();
+    }
+
+    // Create new upload session (end-4a)
+    let uuid = uuid::Uuid::new_v4().to_string();
+
+    if let Err(e) = storage::init_upload_session(&org, &repo, &uuid) {
+        log::error!("Failed to init upload session: {}", e);
+        return response::internal_error();
+    }
+
+    let location = format!("http://{}/v2/{}/{}/blobs/uploads/{}", host, org, repo, uuid);
+
     Response::builder()
-        .status(201)
-        .header("Location", format!("/v2/{}/blobs/uploads/{}", org, repo))
-        .header(
-            "Docker-Content-Digest",
-            query.digest.as_ref().expect("Digest should exist"),
-        )
-        .body("201 Created".to_string())
-        .expect("Failed to build response")
+        .status(StatusCode::ACCEPTED)
+        .header("Location", location)
+        .header("Range", "0-0")
+        .header("Docker-Upload-UUID", uuid)
+        .body(Body::empty())
+        .unwrap()
 }
 
 // end-5 PATCH /v2/:name/blobs/uploads/:reference
 pub(crate) async fn patch_blob_upload(
-    State(data): State<Arc<state::App>>,
-    Path(name): Path<String>,
-    Path(reference): Path<String>,
-) -> Json<Value> {
-    let status = data.server_status.lock().await;
+    State(state): State<Arc<state::App>>,
+    Path((org, repo, uuid)): Path<(String, String, String)>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response<Body> {
     log::info!(
-        "blobs/patch_blob_upload: name: {}, reference: {}",
-        name,
-        reference
+        "blobs/patch_blob_upload: org: {}, repo: {}, uuid: {}",
+        org,
+        repo,
+        uuid
     );
-    Json(json!({
-        "not_implemented": format!("name {} reference {} server_status {}", name, reference, status)
-    }))
+
+    let host = &state.args.host;
+
+    if auth::get(State(state.clone()), headers).await.status() != StatusCode::OK {
+        return Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .header(
+                "WWW-Authenticate",
+                format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
+            )
+            .body(Body::from("401 Unauthorized"))
+            .unwrap();
+    }
+
+    match storage::append_upload_chunk(&org, &repo, &uuid, &body) {
+        Ok(total_size) => {
+            let location = format!("http://{}/v2/{}/{}/blobs/uploads/{}", host, org, repo, uuid);
+
+            Response::builder()
+                .status(StatusCode::ACCEPTED)
+                .header("Location", location)
+                .header("Range", format!("0-{}", total_size.saturating_sub(1)))
+                .header("Docker-Upload-UUID", &uuid)
+                .body(Body::empty())
+                .unwrap()
+        }
+        Err(e) => {
+            log::error!("Failed to append chunk for upload {}: {}", uuid, e);
+            Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::from("Upload session not found"))
+                .unwrap()
+        }
+    }
 }
 
 // end-6 PUT /v2/:name/blobs/uploads/:reference?digest=:digest
@@ -219,22 +279,71 @@ pub(crate) async fn patch_blob_upload(
 pub(crate) struct End6QueryParams {
     digest: String,
 }
+
 pub(crate) async fn put_blob_upload_by_reference(
-    State(data): State<Arc<state::App>>,
-    Path(name): Path<String>,
-    Path(reference): Path<String>,
-    query: Query<End6QueryParams>,
-) -> Json<Value> {
-    let status = data.server_status.lock().await;
+    State(state): State<Arc<state::App>>,
+    Path((org, repo, uuid)): Path<(String, String, String)>,
+    Query(params): Query<End6QueryParams>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response<Body> {
     log::info!(
-        "blobs/put_blob_upload_by_reference: name: {}, reference: {}, digest: {}",
-        name,
-        reference,
-        query.digest
+        "blobs/put_blob_upload_by_reference: org: {}, repo: {}, uuid: {}, digest: {}",
+        org,
+        repo,
+        uuid,
+        params.digest
     );
-    Json(json!({
-        "not_implemented": format!("name {} reference {} digest {} server_status {}", name, reference, query.digest, status)
-    }))
+
+    let host = &state.args.host;
+
+    if auth::get(State(state.clone()), headers).await.status() != StatusCode::OK {
+        return Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .header(
+                "WWW-Authenticate",
+                format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
+            )
+            .body(Body::from("401 Unauthorized"))
+            .unwrap();
+    }
+
+    // Append final chunk if body is not empty
+    if !body.is_empty() {
+        if let Err(e) = storage::append_upload_chunk(&org, &repo, &uuid, &body) {
+            log::error!("Failed to append final chunk: {}", e);
+            return response::internal_error();
+        }
+    }
+
+    // Finalize upload and validate digest
+    match storage::finalize_upload(&org, &repo, &uuid, &params.digest) {
+        Ok(actual_digest) => {
+            let location = format!(
+                "http://{}/v2/{}/{}/blobs/sha256:{}",
+                host, org, repo, actual_digest
+            );
+
+            Response::builder()
+                .status(StatusCode::CREATED)
+                .header("Location", location)
+                .header("Docker-Content-Digest", format!("sha256:{}", actual_digest))
+                .body(Body::empty())
+                .unwrap()
+        }
+        Err(e) => {
+            log::error!("Failed to finalize upload: {}", e);
+
+            // Clean up failed upload
+            let _ = storage::delete_upload_session(&org, &repo, &uuid);
+
+            if e.contains("Digest mismatch") {
+                response::digest_mismatch()
+            } else {
+                response::internal_error()
+            }
+        }
+    }
 }
 
 // end-10 DELETE /v2/:name/blobs/:digest

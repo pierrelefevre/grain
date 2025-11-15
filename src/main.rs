@@ -51,10 +51,6 @@ async fn main() {
             post(blobs::post_blob_upload),
         ) // end-4a, end-4b, end-11
         .route(
-            "/v2/{org}/{repo}/blobs/uploads/",
-            put(blobs::put_blob_upload),
-        ) // returned location for actual file upload
-        .route(
             "/v2/{org}/{repo}/blobs/uploads/{reference}",
             patch(blobs::patch_blob_upload),
         ) // end-5
