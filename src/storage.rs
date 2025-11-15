@@ -275,3 +275,47 @@ pub(crate) fn delete_upload_session(
     );
     std::fs::remove_file(upload_path)
 }
+
+pub(crate) fn delete_manifest(
+    org: &str,
+    repo: &str,
+    reference: &str,
+) -> Result<(), std::io::Error> {
+    let sanitized_org = sanitize_string(org);
+    let sanitized_repo = sanitize_string(repo);
+    let sanitized_reference = sanitize_string(reference);
+
+    let manifest_path = format!(
+        "./tmp/manifests/{}/{}/{}",
+        sanitized_org, sanitized_repo, sanitized_reference
+    );
+
+    if !std::path::Path::new(&manifest_path).exists() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Manifest not found",
+        ));
+    }
+
+    std::fs::remove_file(manifest_path)
+}
+
+pub(crate) fn delete_blob(org: &str, repo: &str, digest: &str) -> Result<(), std::io::Error> {
+    let sanitized_org = sanitize_string(org);
+    let sanitized_repo = sanitize_string(repo);
+    let sanitized_digest = sanitize_string(digest);
+
+    let blob_path = format!(
+        "./tmp/blobs/{}/{}/{}",
+        sanitized_org, sanitized_repo, sanitized_digest
+    );
+
+    if !std::path::Path::new(&blob_path).exists() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Blob not found",
+        ));
+    }
+
+    std::fs::remove_file(blob_path)
+}

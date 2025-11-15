@@ -188,16 +188,69 @@ pub(crate) async fn put_manifest_by_reference(
 
 // end-9 DELETE /v2/:name/manifests/:reference
 pub(crate) async fn delete_manifest_by_reference(
-    Path(name): Path<String>,
-    Path(reference): Path<String>,
+    State(state): State<Arc<state::App>>,
+    Path((org, repo, reference)): Path<(String, String, String)>,
+    headers: HeaderMap,
 ) -> Response<Body> {
+    let host = &state.args.host;
+
+    // Authenticate
+    if auth::get(State(state.clone()), headers).await.status() != StatusCode::OK {
+        return Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .header(
+                "WWW-Authenticate",
+                format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
+            )
+            .body(Body::from("401 Unauthorized"))
+            .unwrap();
+    }
+
+    // Clean reference (strip sha256: prefix if present)
+    let clean_reference = reference.strip_prefix("sha256:").unwrap_or(&reference);
+
     log::info!(
-        "manifests/delete_manifest_by_reference: name: {}, reference: {}",
-        name,
-        reference
+        "manifests/delete_manifest_by_reference: org: {}, repo: {}, reference: {}",
+        org,
+        repo,
+        clean_reference
     );
-    Response::builder()
-        .status(StatusCode::NOT_IMPLEMENTED)
-        .body(Body::from("501 Not Implemented"))
-        .unwrap()
+
+    // Delete manifest
+    match storage::delete_manifest(&org, &repo, clean_reference) {
+        Ok(()) => {
+            log::info!("Deleted manifest {}/{}/{}", org, repo, clean_reference);
+
+            Response::builder()
+                .status(StatusCode::ACCEPTED)
+                .body(Body::empty())
+                .unwrap()
+        }
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                log::warn!(
+                    "Attempted to delete non-existent manifest {}/{}/{}",
+                    org,
+                    repo,
+                    clean_reference
+                );
+                Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(Body::from("404 Not Found"))
+                    .unwrap()
+            } else {
+                log::error!(
+                    "Failed to delete manifest {}/{}/{}: {}",
+                    org,
+                    repo,
+                    clean_reference,
+                    e
+                );
+                Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Body::from("Internal server error"))
+                    .unwrap()
+            }
+        }
+    }
 }
