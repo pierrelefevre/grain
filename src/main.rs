@@ -12,6 +12,7 @@ mod auth;
 mod blobs;
 mod manifests;
 mod meta;
+mod permissions;
 mod response;
 mod state;
 mod storage;

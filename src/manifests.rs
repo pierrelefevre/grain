@@ -7,7 +7,7 @@
 use serde_json::Value;
 use std::sync::Arc;
 
-use crate::{auth, state, storage};
+use crate::{auth, permissions, state, storage};
 use axum::{
     body::Body,
     extract::{Path, State},
@@ -94,23 +94,38 @@ pub(crate) async fn head_manifest_by_reference(
     headers: HeaderMap,
 ) -> Response<Body> {
     let host = &state.args.host;
-
-    if auth::get(State(state.clone()), headers.clone())
-        .await
-        .status()
-        != StatusCode::OK
-    {
-        return Response::builder()
-            .status(StatusCode::UNAUTHORIZED)
-            .header(
-                "WWW-Authenticate",
-                format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
-            )
-            .body(Body::from("401 Unauthorized"))
-            .unwrap();
-    }
-
+    let repository = format!("{}/{}", org, repo);
     let clean_reference = reference.strip_prefix("sha256:").unwrap_or(&reference);
+
+    // Check permission (Pull for manifest retrieval, tag-specific)
+    match auth::check_permission(
+        &state,
+        &headers,
+        &repository,
+        Some(clean_reference),
+        permissions::Action::Pull,
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(_) => {
+            return if auth::authenticate_user(&state, &headers).await.is_ok() {
+                Response::builder()
+                    .status(StatusCode::FORBIDDEN)
+                    .body(Body::from("403 Forbidden: Insufficient permissions"))
+                    .unwrap()
+            } else {
+                Response::builder()
+                    .status(StatusCode::UNAUTHORIZED)
+                    .header(
+                        "WWW-Authenticate",
+                        format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
+                    )
+                    .body(Body::from("401 Unauthorized"))
+                    .unwrap()
+            };
+        }
+    }
 
     log::info!(
         "manifests/head_manifest_by_reference: org: {}, repo: {}, reference: {}",
@@ -158,7 +173,9 @@ pub(crate) async fn head_manifest_by_reference(
 // end-7 PUT /v2/:name/manifests/:reference
 #[axum::debug_handler]
 pub(crate) async fn put_manifest_by_reference(
+    State(state): State<Arc<state::App>>,
     Path((org, repo, reference)): Path<(String, String, String)>,
+    headers: HeaderMap,
     body: Request<Body>,
 ) -> Response {
     log::info!(
@@ -167,6 +184,40 @@ pub(crate) async fn put_manifest_by_reference(
         repo,
         reference
     );
+
+    let host = &state.args.host;
+    let repository = format!("{}/{}", org, repo);
+    let clean_reference = reference.strip_prefix("sha256:").unwrap_or(&reference);
+
+    // Check permission (Push for manifest upload, tag-specific)
+    match auth::check_permission(
+        &state,
+        &headers,
+        &repository,
+        Some(clean_reference),
+        permissions::Action::Push,
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(_) => {
+            return if auth::authenticate_user(&state, &headers).await.is_ok() {
+                Response::builder()
+                    .status(StatusCode::FORBIDDEN)
+                    .body(Body::from("403 Forbidden: Insufficient permissions"))
+                    .unwrap()
+            } else {
+                Response::builder()
+                    .status(StatusCode::UNAUTHORIZED)
+                    .header(
+                        "WWW-Authenticate",
+                        format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
+                    )
+                    .body(Body::from("401 Unauthorized"))
+                    .unwrap()
+            };
+        }
+    }
 
     let success = storage::write_manifest(&org, &repo, &reference, body.into_body()).await;
     if !success {
@@ -193,21 +244,38 @@ pub(crate) async fn delete_manifest_by_reference(
     headers: HeaderMap,
 ) -> Response<Body> {
     let host = &state.args.host;
-
-    // Authenticate
-    if auth::get(State(state.clone()), headers).await.status() != StatusCode::OK {
-        return Response::builder()
-            .status(StatusCode::UNAUTHORIZED)
-            .header(
-                "WWW-Authenticate",
-                format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
-            )
-            .body(Body::from("401 Unauthorized"))
-            .unwrap();
-    }
-
-    // Clean reference (strip sha256: prefix if present)
+    let repository = format!("{}/{}", org, repo);
     let clean_reference = reference.strip_prefix("sha256:").unwrap_or(&reference);
+
+    // Check permission (Delete for manifest deletion, tag-specific)
+    match auth::check_permission(
+        &state,
+        &headers,
+        &repository,
+        Some(clean_reference),
+        permissions::Action::Delete,
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(_) => {
+            return if auth::authenticate_user(&state, &headers).await.is_ok() {
+                Response::builder()
+                    .status(StatusCode::FORBIDDEN)
+                    .body(Body::from("403 Forbidden: Insufficient permissions"))
+                    .unwrap()
+            } else {
+                Response::builder()
+                    .status(StatusCode::UNAUTHORIZED)
+                    .header(
+                        "WWW-Authenticate",
+                        format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
+                    )
+                    .body(Body::from("401 Unauthorized"))
+                    .unwrap()
+            };
+        }
+    }
 
     log::info!(
         "manifests/delete_manifest_by_reference: org: {}, repo: {}, reference: {}",

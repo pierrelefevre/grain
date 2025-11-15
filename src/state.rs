@@ -11,10 +11,24 @@ pub(crate) enum ServerStatus {
     Ready,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct User {
-    pub(crate) username: String,
-    pub(crate) password: String,
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct Permission {
+    pub repository: String,
+    pub tag: String,
+    pub actions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct User {
+    pub username: String,
+    pub password: String,
+    #[serde(default)]
+    pub permissions: Vec<Permission>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UsersFile {
+    pub users: Vec<User>,
 }
 
 impl fmt::Display for ServerStatus {
@@ -41,8 +55,8 @@ fn load_users_from_file(file_path: &str) -> HashSet<User> {
         }
     };
 
-    let users: Vec<User> = match serde_json::from_str(&file_content) {
-        Ok(users) => users,
+    let users_file: UsersFile = match serde_json::from_str(&file_content) {
+        Ok(users_file) => users_file,
         Err(err) => {
             log::error!(
                 "Failed to parse JSON from users file {}: {}",
@@ -53,8 +67,8 @@ fn load_users_from_file(file_path: &str) -> HashSet<User> {
         }
     };
 
-    log::info!("Loaded {} users", users.len());
-    HashSet::from_iter(users)
+    log::info!("Loaded {} users", users_file.users.len());
+    HashSet::from_iter(users_file.users)
 }
 
 pub(crate) fn new_app(args: &Args) -> App {

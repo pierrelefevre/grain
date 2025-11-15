@@ -39,3 +39,10 @@ pub(crate) fn digest_mismatch() -> Response<Body> {
         .body(Body::from("Digest mismatch"))
         .unwrap()
 }
+
+pub(crate) fn forbidden() -> Response<Body> {
+    Response::builder()
+        .status(403)
+        .body(Body::from("403 Forbidden: Insufficient permissions"))
+        .unwrap()
+}

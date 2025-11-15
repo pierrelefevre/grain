@@ -13,7 +13,7 @@ use serde::Deserialize;
 use std::sync::Arc;
 
 use crate::{
-    auth, response, state,
+    auth, permissions, response, state,
     storage::{self, write_blob},
 };
 use axum::{
@@ -38,17 +38,33 @@ pub(crate) async fn get_blob_by_digest(
     );
 
     let host = &state.args.host;
+    let repository = format!("{}/{}", org, repo);
 
-    // Authenticate
-    if auth::get(State(state.clone()), headers).await.status() != StatusCode::OK {
-        return Response::builder()
-            .status(StatusCode::UNAUTHORIZED)
-            .header(
-                "WWW-Authenticate",
-                format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
-            )
-            .body(Body::from("401 Unauthorized"))
-            .unwrap();
+    // Check permission (Pull for blob retrieval)
+    match auth::check_permission(
+        &state,
+        &headers,
+        &repository,
+        None,
+        permissions::Action::Pull,
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(_) => {
+            return if auth::authenticate_user(&state, &headers).await.is_ok() {
+                response::forbidden()
+            } else {
+                Response::builder()
+                    .status(StatusCode::UNAUTHORIZED)
+                    .header(
+                        "WWW-Authenticate",
+                        format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
+                    )
+                    .body(Body::from("401 Unauthorized"))
+                    .unwrap()
+            };
+        }
     }
 
     // Strip sha256: prefix if present
@@ -95,17 +111,36 @@ pub(crate) async fn head_blob_by_digest(
     );
 
     let host = &state.args.host;
+    let repository = format!("{}/{}", org, repo);
 
-    // Authenticate
-    if auth::get(State(state.clone()), headers).await.status() != StatusCode::OK {
-        return Response::builder()
-            .status(StatusCode::UNAUTHORIZED)
-            .header(
-                "WWW-Authenticate",
-                format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
-            )
-            .body(Body::empty())
-            .unwrap();
+    // Check permission (Pull for blob retrieval)
+    match auth::check_permission(
+        &state,
+        &headers,
+        &repository,
+        None,
+        permissions::Action::Pull,
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(_) => {
+            return if auth::authenticate_user(&state, &headers).await.is_ok() {
+                Response::builder()
+                    .status(StatusCode::FORBIDDEN)
+                    .body(Body::empty())
+                    .unwrap()
+            } else {
+                Response::builder()
+                    .status(StatusCode::UNAUTHORIZED)
+                    .header(
+                        "WWW-Authenticate",
+                        format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
+                    )
+                    .body(Body::empty())
+                    .unwrap()
+            };
+        }
     }
 
     // Strip sha256: prefix if present
@@ -160,20 +195,33 @@ pub(crate) async fn post_blob_upload(
     log::info!("blobs/post_blob_upload: org: {}, repo: {}", org, repo);
 
     let host = &state.args.host;
+    let repository = format!("{}/{}", org, repo);
 
-    if auth::get(State(state.clone()), headers.clone())
-        .await
-        .status()
-        != StatusCode::OK
+    // Check permission (Push for blob upload)
+    match auth::check_permission(
+        &state,
+        &headers,
+        &repository,
+        None,
+        permissions::Action::Push,
+    )
+    .await
     {
-        return Response::builder()
-            .status(StatusCode::UNAUTHORIZED)
-            .header(
-                "WWW-Authenticate",
-                format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
-            )
-            .body(Body::from("401 Unauthorized"))
-            .unwrap();
+        Ok(_) => {}
+        Err(_) => {
+            return if auth::authenticate_user(&state, &headers).await.is_ok() {
+                response::forbidden()
+            } else {
+                Response::builder()
+                    .status(StatusCode::UNAUTHORIZED)
+                    .header(
+                        "WWW-Authenticate",
+                        format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
+                    )
+                    .body(Body::from("401 Unauthorized"))
+                    .unwrap()
+            };
+        }
     }
 
     // If digest is provided, handle monolithic upload (end-4b)
@@ -239,16 +287,33 @@ pub(crate) async fn patch_blob_upload(
     );
 
     let host = &state.args.host;
+    let repository = format!("{}/{}", org, repo);
 
-    if auth::get(State(state.clone()), headers).await.status() != StatusCode::OK {
-        return Response::builder()
-            .status(StatusCode::UNAUTHORIZED)
-            .header(
-                "WWW-Authenticate",
-                format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
-            )
-            .body(Body::from("401 Unauthorized"))
-            .unwrap();
+    // Check permission (Push for blob upload)
+    match auth::check_permission(
+        &state,
+        &headers,
+        &repository,
+        None,
+        permissions::Action::Push,
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(_) => {
+            return if auth::authenticate_user(&state, &headers).await.is_ok() {
+                response::forbidden()
+            } else {
+                Response::builder()
+                    .status(StatusCode::UNAUTHORIZED)
+                    .header(
+                        "WWW-Authenticate",
+                        format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
+                    )
+                    .body(Body::from("401 Unauthorized"))
+                    .unwrap()
+            };
+        }
     }
 
     match storage::append_upload_chunk(&org, &repo, &uuid, &body) {
@@ -295,16 +360,33 @@ pub(crate) async fn put_blob_upload_by_reference(
     );
 
     let host = &state.args.host;
+    let repository = format!("{}/{}", org, repo);
 
-    if auth::get(State(state.clone()), headers).await.status() != StatusCode::OK {
-        return Response::builder()
-            .status(StatusCode::UNAUTHORIZED)
-            .header(
-                "WWW-Authenticate",
-                format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
-            )
-            .body(Body::from("401 Unauthorized"))
-            .unwrap();
+    // Check permission (Push for blob upload)
+    match auth::check_permission(
+        &state,
+        &headers,
+        &repository,
+        None,
+        permissions::Action::Push,
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(_) => {
+            return if auth::authenticate_user(&state, &headers).await.is_ok() {
+                response::forbidden()
+            } else {
+                Response::builder()
+                    .status(StatusCode::UNAUTHORIZED)
+                    .header(
+                        "WWW-Authenticate",
+                        format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
+                    )
+                    .body(Body::from("401 Unauthorized"))
+                    .unwrap()
+            };
+        }
     }
 
     // Append final chunk if body is not empty
@@ -352,17 +434,33 @@ pub(crate) async fn delete_blob_by_digest(
     headers: HeaderMap,
 ) -> Response<Body> {
     let host = &state.args.host;
+    let repository = format!("{}/{}", org, repo);
 
-    // Authenticate
-    if auth::get(State(state.clone()), headers).await.status() != StatusCode::OK {
-        return Response::builder()
-            .status(StatusCode::UNAUTHORIZED)
-            .header(
-                "WWW-Authenticate",
-                format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
-            )
-            .body(Body::from("401 Unauthorized"))
-            .unwrap();
+    // Check permission (Delete for blob deletion)
+    match auth::check_permission(
+        &state,
+        &headers,
+        &repository,
+        None,
+        permissions::Action::Delete,
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(_) => {
+            return if auth::authenticate_user(&state, &headers).await.is_ok() {
+                response::forbidden()
+            } else {
+                Response::builder()
+                    .status(StatusCode::UNAUTHORIZED)
+                    .header(
+                        "WWW-Authenticate",
+                        format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
+                    )
+                    .body(Body::from("401 Unauthorized"))
+                    .unwrap()
+            };
+        }
     }
 
     // Clean digest (strip sha256: prefix if present)

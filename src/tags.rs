@@ -9,7 +9,7 @@ use axum::response::Response;
 use serde::Deserialize;
 use std::sync::Arc;
 
-use crate::{auth, state, storage};
+use crate::{auth, permissions, state, storage};
 use axum::extract::{Path, Query, State};
 
 // end-8a GET /v2/:name/tags/list
@@ -46,21 +46,36 @@ pub(crate) async fn get_tags_list(
     headers: HeaderMap,
 ) -> Response<Body> {
     let host = &state.args.host;
+    let repository = format!("{}/{}", org, repo);
 
-    // Authenticate
-    if auth::get(State(state.clone()), headers.clone())
-        .await
-        .status()
-        != StatusCode::OK
+    // Check permission (Pull for tag listing)
+    match auth::check_permission(
+        &state,
+        &headers,
+        &repository,
+        None,
+        permissions::Action::Pull,
+    )
+    .await
     {
-        return Response::builder()
-            .status(StatusCode::UNAUTHORIZED)
-            .header(
-                "WWW-Authenticate",
-                format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
-            )
-            .body(Body::from("401 Unauthorized"))
-            .unwrap();
+        Ok(_) => {}
+        Err(_) => {
+            return if auth::authenticate_user(&state, &headers).await.is_ok() {
+                Response::builder()
+                    .status(StatusCode::FORBIDDEN)
+                    .body(Body::from("403 Forbidden: Insufficient permissions"))
+                    .unwrap()
+            } else {
+                Response::builder()
+                    .status(StatusCode::UNAUTHORIZED)
+                    .header(
+                        "WWW-Authenticate",
+                        format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
+                    )
+                    .body(Body::from("401 Unauthorized"))
+                    .unwrap()
+            };
+        }
     }
 
     // Get all tags from storage
