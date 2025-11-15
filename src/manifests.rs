@@ -7,7 +7,7 @@
 use serde_json::Value;
 use std::sync::Arc;
 
-use crate::{auth, permissions, state, storage};
+use crate::{auth, permissions, response, state, storage};
 use axum::{
     body::Body,
     extract::{Path, State},
@@ -39,14 +39,7 @@ pub(crate) async fn get_manifest_by_reference(
         .status()
         != StatusCode::OK
     {
-        return Response::builder()
-            .status(StatusCode::UNAUTHORIZED)
-            .header(
-                "WWW-Authenticate",
-                format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
-            )
-            .body(Body::from("401 Unauthorized"))
-            .unwrap();
+        return response::unauthorized(host);
     }
 
     let clean_reference = reference.strip_prefix("sha256:").unwrap_or(&reference);
@@ -79,10 +72,7 @@ pub(crate) async fn get_manifest_by_reference(
                 clean_reference,
                 e
             );
-            Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from("404 Not Found"))
-                .unwrap()
+            response::manifest_unknown(clean_reference)
         }
     }
 }
@@ -110,19 +100,9 @@ pub(crate) async fn head_manifest_by_reference(
         Ok(_) => {}
         Err(_) => {
             return if auth::authenticate_user(&state, &headers).await.is_ok() {
-                Response::builder()
-                    .status(StatusCode::FORBIDDEN)
-                    .body(Body::from("403 Forbidden: Insufficient permissions"))
-                    .unwrap()
+                response::forbidden()
             } else {
-                Response::builder()
-                    .status(StatusCode::UNAUTHORIZED)
-                    .header(
-                        "WWW-Authenticate",
-                        format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
-                    )
-                    .body(Body::from("401 Unauthorized"))
-                    .unwrap()
+                response::unauthorized(host)
             };
         }
     }
@@ -135,10 +115,7 @@ pub(crate) async fn head_manifest_by_reference(
     );
 
     if !storage::manifest_exists(&org, &repo, clean_reference) {
-        return Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(Body::from("404 Not Found"))
-            .unwrap();
+        return response::manifest_unknown(clean_reference);
     }
 
     match storage::read_manifest(&org, &repo, clean_reference) {
@@ -162,10 +139,7 @@ pub(crate) async fn head_manifest_by_reference(
                 clean_reference,
                 e
             );
-            Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from("404 Not Found"))
-                .unwrap()
+            response::manifest_unknown(clean_reference)
         }
     }
 }
@@ -202,29 +176,16 @@ pub(crate) async fn put_manifest_by_reference(
         Ok(_) => {}
         Err(_) => {
             return if auth::authenticate_user(&state, &headers).await.is_ok() {
-                Response::builder()
-                    .status(StatusCode::FORBIDDEN)
-                    .body(Body::from("403 Forbidden: Insufficient permissions"))
-                    .unwrap()
+                response::forbidden()
             } else {
-                Response::builder()
-                    .status(StatusCode::UNAUTHORIZED)
-                    .header(
-                        "WWW-Authenticate",
-                        format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
-                    )
-                    .body(Body::from("401 Unauthorized"))
-                    .unwrap()
+                response::unauthorized(host)
             };
         }
     }
 
     let success = storage::write_manifest(&org, &repo, &reference, body.into_body()).await;
     if !success {
-        return Response::builder()
-            .status(400)
-            .body(Body::from("400 Bad Request"))
-            .expect("Failed to build response");
+        return response::manifest_invalid("invalid manifest format");
     }
 
     Response::builder()
@@ -260,19 +221,9 @@ pub(crate) async fn delete_manifest_by_reference(
         Ok(_) => {}
         Err(_) => {
             return if auth::authenticate_user(&state, &headers).await.is_ok() {
-                Response::builder()
-                    .status(StatusCode::FORBIDDEN)
-                    .body(Body::from("403 Forbidden: Insufficient permissions"))
-                    .unwrap()
+                response::forbidden()
             } else {
-                Response::builder()
-                    .status(StatusCode::UNAUTHORIZED)
-                    .header(
-                        "WWW-Authenticate",
-                        format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
-                    )
-                    .body(Body::from("401 Unauthorized"))
-                    .unwrap()
+                response::unauthorized(host)
             };
         }
     }
@@ -302,10 +253,7 @@ pub(crate) async fn delete_manifest_by_reference(
                     repo,
                     clean_reference
                 );
-                Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .body(Body::from("404 Not Found"))
-                    .unwrap()
+                response::manifest_unknown(clean_reference)
             } else {
                 log::error!(
                     "Failed to delete manifest {}/{}/{}: {}",
@@ -314,10 +262,7 @@ pub(crate) async fn delete_manifest_by_reference(
                     clean_reference,
                     e
                 );
-                Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(Body::from("Internal server error"))
-                    .unwrap()
+                response::internal_error()
             }
         }
     }

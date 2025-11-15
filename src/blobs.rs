@@ -55,14 +55,7 @@ pub(crate) async fn get_blob_by_digest(
             return if auth::authenticate_user(&state, &headers).await.is_ok() {
                 response::forbidden()
             } else {
-                Response::builder()
-                    .status(StatusCode::UNAUTHORIZED)
-                    .header(
-                        "WWW-Authenticate",
-                        format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
-                    )
-                    .body(Body::from("401 Unauthorized"))
-                    .unwrap()
+                response::unauthorized(host)
             };
         }
     }
@@ -89,10 +82,7 @@ pub(crate) async fn get_blob_by_digest(
                 clean_digest,
                 e
             );
-            Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from("404 Not Found"))
-                .unwrap()
+            response::blob_unknown(&format!("sha256:{}", clean_digest))
         }
     }
 }
@@ -165,10 +155,7 @@ pub(crate) async fn head_blob_by_digest(
                 clean_digest,
                 e
             );
-            Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::empty())
-                .unwrap()
+            response::blob_unknown(&format!("sha256:{}", clean_digest))
         }
     }
 }
@@ -210,14 +197,7 @@ pub(crate) async fn post_blob_upload(
             return if auth::authenticate_user(&state, &headers).await.is_ok() {
                 response::forbidden()
             } else {
-                Response::builder()
-                    .status(StatusCode::UNAUTHORIZED)
-                    .header(
-                        "WWW-Authenticate",
-                        format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
-                    )
-                    .body(Body::from("401 Unauthorized"))
-                    .unwrap()
+                response::unauthorized(host)
             };
         }
     }
@@ -287,10 +267,7 @@ pub(crate) async fn post_blob_upload(
         let success = write_blob(&org, &repo, &digest_string, Body::from(body)).await;
 
         if !success {
-            return Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .body(Body::from("Digest mismatch or write failed"))
-                .unwrap();
+            return response::digest_invalid(&digest_string);
         }
 
         let clean_digest = digest_string
@@ -362,14 +339,7 @@ pub(crate) async fn patch_blob_upload(
             return if auth::authenticate_user(&state, &headers).await.is_ok() {
                 response::forbidden()
             } else {
-                Response::builder()
-                    .status(StatusCode::UNAUTHORIZED)
-                    .header(
-                        "WWW-Authenticate",
-                        format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
-                    )
-                    .body(Body::from("401 Unauthorized"))
-                    .unwrap()
+                response::unauthorized(host)
             };
         }
     }
@@ -388,10 +358,7 @@ pub(crate) async fn patch_blob_upload(
         }
         Err(e) => {
             log::error!("Failed to append chunk for upload {}: {}", uuid, e);
-            Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from("Upload session not found"))
-                .unwrap()
+            response::blob_upload_unknown(&uuid)
         }
     }
 }
@@ -435,14 +402,7 @@ pub(crate) async fn put_blob_upload_by_reference(
             return if auth::authenticate_user(&state, &headers).await.is_ok() {
                 response::forbidden()
             } else {
-                Response::builder()
-                    .status(StatusCode::UNAUTHORIZED)
-                    .header(
-                        "WWW-Authenticate",
-                        format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
-                    )
-                    .body(Body::from("401 Unauthorized"))
-                    .unwrap()
+                response::unauthorized(host)
             };
         }
     }
@@ -477,7 +437,7 @@ pub(crate) async fn put_blob_upload_by_reference(
             let _ = storage::delete_upload_session(&org, &repo, &uuid);
 
             if e.contains("Digest mismatch") {
-                response::digest_mismatch()
+                response::digest_invalid(&params.digest)
             } else {
                 response::internal_error()
             }
@@ -509,14 +469,7 @@ pub(crate) async fn delete_blob_by_digest(
             return if auth::authenticate_user(&state, &headers).await.is_ok() {
                 response::forbidden()
             } else {
-                Response::builder()
-                    .status(StatusCode::UNAUTHORIZED)
-                    .header(
-                        "WWW-Authenticate",
-                        format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
-                    )
-                    .body(Body::from("401 Unauthorized"))
-                    .unwrap()
+                response::unauthorized(host)
             };
         }
     }
@@ -551,10 +504,7 @@ pub(crate) async fn delete_blob_by_digest(
                     repo,
                     clean_digest
                 );
-                Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .body(Body::from("404 Not Found"))
-                    .unwrap()
+                response::blob_unknown(&format!("sha256:{}", clean_digest))
             } else {
                 log::error!(
                     "Failed to delete blob {}/{}/{}: {}",
@@ -563,10 +513,7 @@ pub(crate) async fn delete_blob_by_digest(
                     clean_digest,
                     e
                 );
-                Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(Body::from("Internal server error"))
-                    .unwrap()
+                response::internal_error()
             }
         }
     }

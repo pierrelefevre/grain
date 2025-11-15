@@ -9,7 +9,7 @@ use axum::response::Response;
 use serde::Deserialize;
 use std::sync::Arc;
 
-use crate::{auth, permissions, state, storage};
+use crate::{auth, permissions, response, state, storage};
 use axum::extract::{Path, Query, State};
 
 // end-8a GET /v2/:name/tags/list
@@ -61,19 +61,9 @@ pub(crate) async fn get_tags_list(
         Ok(_) => {}
         Err(_) => {
             return if auth::authenticate_user(&state, &headers).await.is_ok() {
-                Response::builder()
-                    .status(StatusCode::FORBIDDEN)
-                    .body(Body::from("403 Forbidden: Insufficient permissions"))
-                    .unwrap()
+                response::forbidden()
             } else {
-                Response::builder()
-                    .status(StatusCode::UNAUTHORIZED)
-                    .header(
-                        "WWW-Authenticate",
-                        format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
-                    )
-                    .body(Body::from("401 Unauthorized"))
-                    .unwrap()
+                response::unauthorized(host)
             };
         }
     }

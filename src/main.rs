@@ -13,6 +13,7 @@ mod admin;
 mod args;
 mod auth;
 mod blobs;
+mod errors;
 mod manifests;
 mod meta;
 mod openapi;
