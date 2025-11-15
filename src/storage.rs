@@ -50,20 +50,19 @@ pub(crate) async fn write_blob(org: &str, repo: &str, req_digest_string: &str, b
     write_bytes_to_file(&base_path, req_digest, &bytes).await
 }
 
-pub(crate) async fn write_manifest(org: &str, repo: &str, reference: &str, body: Body) -> bool {
-    let bytes_res = axum::body::to_bytes(body, usize::MAX).await;
-    if bytes_res.is_err() {
-        return false;
-    }
-    let bytes = bytes_res.unwrap();
-
+pub(crate) async fn write_manifest_bytes(
+    org: &str,
+    repo: &str,
+    reference: &str,
+    bytes: &[u8],
+) -> bool {
     let base_path = format!(
         "./tmp/manifests/{}/{}",
         sanitize_string(org),
         sanitize_string(repo),
     );
 
-    write_bytes_to_file(&base_path, reference, &bytes).await
+    write_bytes_to_file(&base_path, reference, bytes).await
 }
 
 pub(crate) async fn write_bytes_to_file(base_path: &str, file_name: &str, bytes: &[u8]) -> bool {

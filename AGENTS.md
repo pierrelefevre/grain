@@ -30,6 +30,9 @@ A production-ready, lightweight OCI registry server featuring:
 - ✅ Granular tag-level permissions
 - ✅ Administration API
 - ✅ CLI administration tool (`grainctl`)
+- ✅ OCI-compliant error responses
+- ✅ Manifest validation (OCI/Docker schemas)
+- ✅ Docker image publishing to GHCR
 
 ## Architecture
 
@@ -55,6 +58,8 @@ src/
 ├── tags.rs       - Tag listing endpoints
 ├── admin.rs      - Administration API (user/permission management)
 ├── permissions.rs - Permission checking logic
+├── validation.rs - Manifest schema validation (OCI/Docker)
+├── errors.rs     - OCI-compliant error response structures
 ├── meta.rs       - Index and catch-all routes
 ├── utils.rs      - Build version helper
 └── bin/
@@ -208,17 +213,15 @@ Scan `./tmp/manifests/{org}/{repo}/` directory:
 ## Missing Features (TODO)
 
 ### High Priority
-1. **Error Handling** - Proper OCI error response format with error codes (see spec.md)
+None
 
 ### Medium Priority
-1. **Validation** - Manifest schema validation (OCI image manifest, image index)
-2. **Garbage Collection** - Clean up unreferenced blobs
-3. **Metrics/Health** - Prometheus metrics, health check endpoint
+1. **Garbage Collection** - Clean up unreferenced blobs
+2. **Metrics/Health** - Prometheus metrics, health check endpoint
 
 ### Low Priority
 1. **TLS Support** - HTTPS configuration
-2. **Docker Image** - Dockerfile for GHCR publishing
-3. **Referrers API** - Support for artifact references (spec extension)
+2. **Referrers API** - Support for artifact references (spec extension)
 
 ## Common Tasks
 

@@ -7,7 +7,7 @@
 use serde_json::Value;
 use std::sync::Arc;
 
-use crate::{auth, permissions, response, state, storage};
+use crate::{auth, permissions, response, state, storage, validation};
 use axum::{
     body::Body,
     extract::{Path, State},
@@ -183,9 +183,30 @@ pub(crate) async fn put_manifest_by_reference(
         }
     }
 
-    let success = storage::write_manifest(&org, &repo, &reference, body.into_body()).await;
+    // Convert body to bytes for validation
+    let bytes = match axum::body::to_bytes(body.into_body(), usize::MAX).await {
+        Ok(b) => b,
+        Err(e) => {
+            log::error!("Failed to read request body: {}", e);
+            return response::manifest_invalid("failed to read request body");
+        }
+    };
+
+    // Validate manifest
+    match validation::validate_manifest(&bytes) {
+        Ok(media_type) => {
+            log::info!("Validated manifest of type: {}", media_type);
+        }
+        Err(e) => {
+            log::warn!("Manifest validation failed: {}", e);
+            return response::manifest_invalid(&e.to_string());
+        }
+    }
+
+    // Store the validated manifest
+    let success = storage::write_manifest_bytes(&org, &repo, &reference, &bytes).await;
     if !success {
-        return response::manifest_invalid("invalid manifest format");
+        return response::manifest_invalid("failed to write manifest");
     }
 
     Response::builder()

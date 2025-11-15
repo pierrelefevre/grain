@@ -23,6 +23,7 @@ mod state;
 mod storage;
 mod tags;
 mod utils;
+mod validation;
 
 #[tokio::main]
 async fn main() {
