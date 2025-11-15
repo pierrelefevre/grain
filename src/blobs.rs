@@ -179,9 +179,7 @@ pub(crate) async fn head_blob_by_digest(
 #[derive(Deserialize)]
 pub(crate) struct PostBlobUploadQueryParams {
     digest: Option<String>,
-    #[allow(dead_code)]
     mount: Option<String>,
-    #[allow(dead_code)]
     from: Option<String>,
 }
 
@@ -221,6 +219,66 @@ pub(crate) async fn post_blob_upload(
                     .body(Body::from("401 Unauthorized"))
                     .unwrap()
             };
+        }
+    }
+
+    // Handle blob mounting (end-11)
+    if let (Some(mount_digest), Some(from_repo)) = (&params.mount, &params.from) {
+        let clean_digest = mount_digest.strip_prefix("sha256:").unwrap_or(mount_digest);
+
+        // Parse source repository (format: "org/repo")
+        let from_parts: Vec<&str> = from_repo.split('/').collect();
+        if from_parts.len() == 2 {
+            let source_org = from_parts[0];
+            let source_repo = from_parts[1];
+            let source_repository = format!("{}/{}", source_org, source_repo);
+
+            // Check if user has pull permission on source repository
+            if auth::check_permission(
+                &state,
+                &headers,
+                &source_repository,
+                None,
+                permissions::Action::Pull,
+            )
+            .await
+            .is_ok()
+            {
+                // Attempt to mount blob
+                match storage::mount_blob(source_org, source_repo, &org, &repo, clean_digest) {
+                    Ok(()) => {
+                        log::info!(
+                            "Mounted blob {} from {} to {}",
+                            clean_digest,
+                            from_repo,
+                            repository
+                        );
+
+                        let location = format!(
+                            "http://{}/v2/{}/{}/blobs/sha256:{}",
+                            host, org, repo, clean_digest
+                        );
+
+                        return Response::builder()
+                            .status(StatusCode::CREATED)
+                            .header("Location", location)
+                            .header("Docker-Content-Digest", format!("sha256:{}", clean_digest))
+                            .body(Body::empty())
+                            .unwrap();
+                    }
+                    Err(e) => {
+                        log::warn!(
+                            "Failed to mount blob {}: {} - falling back to upload",
+                            clean_digest,
+                            e
+                        );
+                        // Fall through to regular upload session creation
+                    }
+                }
+            } else {
+                log::warn!("User lacks permission to mount from {}", from_repo);
+                // Fall through to regular upload
+            }
         }
     }
 

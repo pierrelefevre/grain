@@ -319,3 +319,53 @@ pub(crate) fn delete_blob(org: &str, repo: &str, digest: &str) -> Result<(), std
 
     std::fs::remove_file(blob_path)
 }
+
+pub(crate) fn mount_blob(
+    source_org: &str,
+    source_repo: &str,
+    target_org: &str,
+    target_repo: &str,
+    digest: &str,
+) -> Result<(), std::io::Error> {
+    let sanitized_source_org = sanitize_string(source_org);
+    let sanitized_source_repo = sanitize_string(source_repo);
+    let sanitized_target_org = sanitize_string(target_org);
+    let sanitized_target_repo = sanitize_string(target_repo);
+    let sanitized_digest = sanitize_string(digest);
+
+    // Check if blob exists in source repository
+    let source_path = format!(
+        "./tmp/blobs/{}/{}/{}",
+        sanitized_source_org, sanitized_source_repo, sanitized_digest
+    );
+
+    if !std::path::Path::new(&source_path).exists() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Source blob not found",
+        ));
+    }
+
+    // Create target directory
+    let target_dir = format!(
+        "./tmp/blobs/{}/{}",
+        sanitized_target_org, sanitized_target_repo
+    );
+    std::fs::create_dir_all(&target_dir)?;
+
+    // Create target path
+    let target_path = format!("{}/{}", target_dir, sanitized_digest);
+
+    // If target already exists, that's fine (already mounted)
+    if std::path::Path::new(&target_path).exists() {
+        return Ok(());
+    }
+
+    // Try hard link first (most efficient - no data duplication)
+    if std::fs::hard_link(&source_path, &target_path).is_err() {
+        // If hard link fails (cross-device), copy the file
+        std::fs::copy(&source_path, &target_path)?;
+    }
+
+    Ok(())
+}

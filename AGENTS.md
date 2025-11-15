@@ -22,11 +22,12 @@ A production-ready, lightweight OCI registry server featuring:
 - ✅ Basic auth (end-1: `/v2/`)
 - ✅ Blob uploads (end-4a/4b: `POST /v2/<name>/blobs/uploads/`)
 - ✅ Manifest uploads (end-7: `PUT /v2/<name>/manifests/<reference>`)
-- ❌ Blob/manifest retrieval (end-2, end-3)
-- ❌ Tag listing (end-8a/8b)
-- ❌ Deletion endpoints (end-9, end-10)
-- ❌ Advanced upload operations (end-5, end-6, end-11)
-- ❌ Granular tag-level permissions
+- ✅ Blob/manifest retrieval (end-2, end-3)
+- ✅ Tag listing (end-8a/8b)
+- ✅ Deletion endpoints (end-9, end-10)
+- ✅ Chunked upload operations (end-5, end-6)
+- ✅ Cross-repo blob mounting (end-11)
+- ✅ Granular tag-level permissions
 - ❌ Administration API
 
 ## Architecture
@@ -157,18 +158,18 @@ Reference table from `spec.md` - implement in order of priority:
 | ID     | Method         | Endpoint                                                      | Status    | Priority |
 |--------|----------------|---------------------------------------------------------------|-----------|----------|
 | end-1  | GET            | `/v2/`                                                        | ✅ Done    | 1        |
-| end-2  | GET/HEAD       | `/v2/<name>/blobs/<digest>`                                   | ⚠️ Stub    | 2        |
-| end-3  | GET/HEAD       | `/v2/<name>/manifests/<reference>`                            | ⚠️ Stub    | 3        |
+| end-2  | GET/HEAD       | `/v2/<name>/blobs/<digest>`                                   | ✅ Done    | 2        |
+| end-3  | GET/HEAD       | `/v2/<name>/manifests/<reference>`                            | ✅ Done    | 3        |
 | end-4a | POST           | `/v2/<name>/blobs/uploads/`                                   | ✅ Done    | 4        |
 | end-4b | POST           | `/v2/<name>/blobs/uploads/?digest=<digest>`                   | ✅ Done    | 5        |
-| end-5  | PATCH          | `/v2/<name>/blobs/uploads/<reference>`                        | ⚠️ Stub    | 7        |
-| end-6  | PUT            | `/v2/<name>/blobs/uploads/<reference>?digest=<digest>`        | ⚠️ Stub    | 8        |
+| end-5  | PATCH          | `/v2/<name>/blobs/uploads/<reference>`                        | ✅ Done    | 7        |
+| end-6  | PUT            | `/v2/<name>/blobs/uploads/<reference>?digest=<digest>`        | ✅ Done    | 8        |
 | end-7  | PUT            | `/v2/<name>/manifests/<reference>`                            | ✅ Done    | 6        |
-| end-8a | GET            | `/v2/<name>/tags/list`                                        | ⚠️ Stub    | 9        |
-| end-8b | GET            | `/v2/<name>/tags/list?n=<integer>&last=<integer>`             | ⚠️ Stub    | 10       |
-| end-9  | DELETE         | `/v2/<name>/manifests/<reference>`                            | ⚠️ Stub    | 11       |
-| end-10 | DELETE         | `/v2/<name>/blobs/<digest>`                                   | ⚠️ Stub    | 12       |
-| end-11 | POST           | `/v2/<name>/blobs/uploads/?mount=<digest>&from=<other_name>`  | ⚠️ Stub    | 13       |
+| end-8a | GET            | `/v2/<name>/tags/list`                                        | ✅ Done    | 9        |
+| end-8b | GET            | `/v2/<name>/tags/list?n=<integer>&last=<integer>`             | ✅ Done    | 10       |
+| end-9  | DELETE         | `/v2/<name>/manifests/<reference>`                            | ✅ Done    | 11       |
+| end-10 | DELETE         | `/v2/<name>/blobs/<digest>`                                   | ✅ Done    | 12       |
+| end-11 | POST           | `/v2/<name>/blobs/uploads/?mount=<digest>&from=<other_name>`  | ✅ Done    | 13       |
 
 ### Implementation Notes
 
@@ -202,23 +203,19 @@ Scan `./tmp/manifests/{org}/{repo}/` directory:
 ## Missing Features (TODO)
 
 ### High Priority
-1. **Read Operations** - Implement end-2 (blob GET) and end-3 (manifest GET) for pull workflows
-2. **Tag Listing** - Implement end-8a/8b for image discovery
-3. **Chunked Uploads** - Implement end-5/6 for large blob uploads
-4. **Error Handling** - Proper OCI error response format with error codes (see spec.md)
-
-### Medium Priority
-1. **Granular Permissions** - Tag-level access control (not just user authentication)
+1. **Error Handling** - Proper OCI error response format with error codes (see spec.md)
 2. **Admin API** - REST endpoints to add/remove users, set permissions
 3. **CLI Tool** - Command-line interface for administration tasks
-4. **Validation** - Manifest schema validation (OCI image manifest, image index)
+
+### Medium Priority
+1. **Validation** - Manifest schema validation (OCI image manifest, image index)
+2. **Garbage Collection** - Clean up unreferenced blobs
+3. **Metrics/Health** - Prometheus metrics, health check endpoint
 
 ### Low Priority
-1. **Garbage Collection** - Clean up unreferenced blobs
-2. **Metrics/Health** - Prometheus metrics, health check endpoint
-3. **TLS Support** - HTTPS configuration
-4. **Docker Image** - Dockerfile for GHCR publishing
-5. **Referrers API** - Support for artifact references (spec extension)
+1. **TLS Support** - HTTPS configuration
+2. **Docker Image** - Dockerfile for GHCR publishing
+3. **Referrers API** - Support for artifact references (spec extension)
 
 ## Common Tasks
 
