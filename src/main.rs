@@ -6,12 +6,16 @@ use axum::{
 };
 use clap::Parser;
 use tower_http::cors::CorsLayer;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
+mod admin;
 mod args;
 mod auth;
 mod blobs;
 mod manifests;
 mod meta;
+mod openapi;
 mod permissions;
 mod response;
 mod state;
@@ -72,6 +76,14 @@ async fn main() {
             "/v2/{org}/{repo}/blobs/{digest}",
             delete(blobs::delete_blob_by_digest),
         ) // end-10
+        // Admin API routes
+        .route("/admin/users", get(admin::list_users))
+        .route("/admin/users", post(admin::create_user))
+        .route("/admin/users/{username}", delete(admin::delete_user))
+        .route(
+            "/admin/users/{username}/permissions",
+            post(admin::add_permission),
+        )
         // Catch-all routes for debugging
         .route("/{*path}", head(meta::catch_all_head))
         .route("/{*path}", get(meta::catch_all_get))
@@ -79,8 +91,12 @@ async fn main() {
         .route("/{*path}", put(meta::catch_all_put))
         .route("/{*path}", patch(meta::catch_all_patch))
         .route("/{*path}", delete(meta::catch_all_delete))
+        .with_state(shared_state)
         .layer(CorsLayer::permissive())
-        .with_state(shared_state);
+        .merge(
+            SwaggerUi::new("/swagger-ui")
+                .url("/api-docs/openapi.json", openapi::AdminApiDoc::openapi()),
+        );
 
     log::info!("Listening on: {}", &args.host);
     let listener = tokio::net::TcpListener::bind(&args.host).await.unwrap();

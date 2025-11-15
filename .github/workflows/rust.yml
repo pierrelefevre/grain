@@ -22,16 +22,42 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
-            - name: Lint
-              run: cargo clippy
+            - name: Lint all targets
+              run: cargo clippy --all-targets --all-features -- -D warnings
 
     build:
         name: Build
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
-            - name: Build
-              run: cargo build --verbose
+            - name: Build all binaries
+              run: cargo build --verbose --all-targets
+            - name: Build grain binary
+              run: cargo build --verbose --bin grain
+            - name: Build grainctl binary
+              run: cargo build --verbose --bin grainctl
+
+    build-release:
+        name: Build Release
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - name: Build release binaries
+              run: cargo build --release --all-targets
+            - name: Verify grain binary exists
+              run: test -f target/release/grain
+            - name: Verify grainctl binary exists
+              run: test -f target/release/grainctl
+            - name: Upload grain binary
+              uses: actions/upload-artifact@v4
+              with:
+                  name: grain-binary
+                  path: target/release/grain
+            - name: Upload grainctl binary
+              uses: actions/upload-artifact@v4
+              with:
+                  name: grainctl-binary
+                  path: target/release/grainctl
 
     test:
         name: Test
@@ -39,4 +65,43 @@ jobs:
         steps:
             - uses: actions/checkout@v4
             - name: Run tests
-              run: cargo test --verbose
+              run: cargo test --verbose --all-targets
+
+    integration-test:
+        name: Integration Test
+        runs-on: ubuntu-latest
+        needs: build
+        steps:
+            - uses: actions/checkout@v4
+            - name: Build binaries
+              run: cargo build --release
+            - name: Create test users file
+              run: |
+                  mkdir -p tmp
+                  cat > tmp/users.json << 'EOF'
+                  {
+                    "users": [
+                      {
+                        "username": "admin",
+                        "password": "admin",
+                        "permissions": [{"repository": "*", "tag": "*", "actions": ["pull", "push", "delete"]}]
+                      }
+                    ]
+                  }
+                  EOF
+            - name: Start grain server
+              run: |
+                  ./target/release/grain --host 127.0.0.1:8888 --users-file ./tmp/users.json &
+                  sleep 3
+            - name: Test server is running
+              run: curl -f -u admin:admin http://127.0.0.1:8888/v2/
+            - name: Test grainctl list users
+              run: ./target/release/grainctl user list --url http://127.0.0.1:8888 --username admin --password admin
+            - name: Test grainctl create user
+              run: ./target/release/grainctl user create testuser --pass testpass --url http://127.0.0.1:8888 --username admin --password admin
+            - name: Test grainctl add permission
+              run: ./target/release/grainctl user add-permission testuser --repository "test/*" --tag "*" --actions "pull" --url http://127.0.0.1:8888 --username admin --password admin
+            - name: Test grainctl delete user
+              run: ./target/release/grainctl user delete testuser --url http://127.0.0.1:8888 --username admin --password admin
+            - name: Stop server
+              run: pkill -f "grain.*--host" || true

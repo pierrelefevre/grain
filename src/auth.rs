@@ -2,9 +2,10 @@ use base64::{prelude::BASE64_STANDARD, Engine};
 use std::sync::Arc;
 
 use crate::permissions::{has_permission, Action};
-use crate::response::{ok, unauthorized};
+use crate::response::unauthorized;
 use crate::state::{self, User};
 use axum::{
+    body::Body,
     extract::State,
     http::{HeaderMap, Response},
 };
@@ -69,16 +70,16 @@ pub async fn check_permission(
     }
 }
 
-pub(crate) async fn get(
-    State(data): State<Arc<state::App>>,
-    headers: HeaderMap,
-) -> Response<String> {
+pub(crate) async fn get(State(data): State<Arc<state::App>>, headers: HeaderMap) -> Response<Body> {
     log::info!("Incoming request headers: {:?}", headers);
 
     match authenticate_user(&data, &headers).await {
         Ok(user) => {
             log::info!("User {} authenticated successfully", user.username);
-            ok()
+            Response::builder()
+                .status(200)
+                .body(Body::from("200 OK"))
+                .unwrap()
         }
         Err(_) => {
             log::warn!("Authentication failed");

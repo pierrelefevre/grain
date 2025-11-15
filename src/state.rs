@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
+use utoipa::ToSchema;
 
 use std::{collections::HashSet, fmt, fs};
 
@@ -11,14 +12,14 @@ pub(crate) enum ServerStatus {
     Ready,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]
 pub struct Permission {
     pub repository: String,
     pub tag: String,
     pub actions: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]
 pub struct User {
     pub username: String,
     pub password: String,
@@ -26,7 +27,7 @@ pub struct User {
     pub permissions: Vec<Permission>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct UsersFile {
     pub users: Vec<User>,
 }

@@ -18,7 +18,7 @@ A production-ready, lightweight OCI registry server featuring:
 - CLI tools for administration
 
 ### Current State
-**Partial implementation** - basic skeleton exists but many endpoints return "not implemented":
+**Full implementation** - all core OCI endpoints and administration features are complete:
 - ✅ Basic auth (end-1: `/v2/`)
 - ✅ Blob uploads (end-4a/4b: `POST /v2/<name>/blobs/uploads/`)
 - ✅ Manifest uploads (end-7: `PUT /v2/<name>/manifests/<reference>`)
@@ -28,7 +28,8 @@ A production-ready, lightweight OCI registry server featuring:
 - ✅ Chunked upload operations (end-5, end-6)
 - ✅ Cross-repo blob mounting (end-11)
 - ✅ Granular tag-level permissions
-- ❌ Administration API
+- ✅ Administration API
+- ✅ CLI administration tool (`grainctl`)
 
 ## Architecture
 
@@ -47,13 +48,17 @@ src/
 ├── args.rs       - CLI argument parsing (host, users_file)
 ├── state.rs      - Shared app state (server status, users, config)
 ├── auth.rs       - HTTP Basic Auth parsing and validation
-├── response.rs   - HTTP response helpers (ok, unauthorized, not_found, etc.)
+├── response.rs   - HTTP response helpers (unauthorized, not_found, forbidden, etc.)
 ├── storage.rs    - Filesystem I/O for blobs/manifests
 ├── blobs.rs      - Blob endpoints (GET, HEAD, POST, PATCH, PUT, DELETE)
 ├── manifests.rs  - Manifest endpoints (GET, HEAD, PUT, DELETE)
 ├── tags.rs       - Tag listing endpoints
+├── admin.rs      - Administration API (user/permission management)
+├── permissions.rs - Permission checking logic
 ├── meta.rs       - Index and catch-all routes
-└── utils.rs      - Build version helper
+├── utils.rs      - Build version helper
+└── bin/
+    └── grainctl.rs - CLI tool for administration (separate binary)
 ```
 
 ### Data Flow
@@ -204,8 +209,6 @@ Scan `./tmp/manifests/{org}/{repo}/` directory:
 
 ### High Priority
 1. **Error Handling** - Proper OCI error response format with error codes (see spec.md)
-2. **Admin API** - REST endpoints to add/remove users, set permissions
-3. **CLI Tool** - Command-line interface for administration tasks
 
 ### Medium Priority
 1. **Validation** - Manifest schema validation (OCI image manifest, image index)
