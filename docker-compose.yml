@@ -6,22 +6,35 @@ services:
     container_name: grain-registry
     ports:
       - "8888:8888"
-    volumes:
-      - ./data:/data
-      - grain-blobs:/data/blobs
-      - grain-manifests:/data/manifests
-      - grain-uploads:/data/uploads
+    restart: unless-stopped
     environment:
       - RUST_LOG=info
-    restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8888/v2/"]
       interval: 30s
       timeout: 3s
       retries: 3
       start_period: 5s
+    volumes:
+      # The application writes blobs/manifests/uploads under its working dir at /app/tmp
+      - /var/lib/grain/tmp:/app/tmp
+      # Bind the users file into the container path the image expects
+      - /var/lib/grain/users.json:/data/users.json:ro
 
-volumes:
-  grain-blobs:
-  grain-manifests:
-  grain-uploads:
+  caddy:
+    image: caddy:2
+    container_name: grain-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: unless-stopped
+    depends_on:
+      - grain
+    volumes:
+      # Caddyfile: replace the placeholder domain with your actual domain
+      - /var/lib/grain/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Persistent storage for Caddy (TLS certs and config)
+      - /var/lib/grain/caddy/data:/data
+      - /var/lib/grain/caddy/config:/config
+      # Optional: persist Caddy logs on the host
+      - /var/lib/grain/caddy/logs:/var/log/caddy

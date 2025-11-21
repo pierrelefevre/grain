@@ -1,0 +1,11 @@
+# Replace 'your-registry.example.com' with your real domain
+# Caddy will automatically obtain TLS certificates for this domain via Let's Encrypt
+# and reverse-proxy traffic to the `grain` service on port 8888 (same Docker network)
+
+your-registry.example.com {
+    reverse_proxy grain:8888
+    log {
+        output file /var/log/caddy/grain_access.log
+        format single_field common_log
+    }
+}
