@@ -56,7 +56,7 @@ fn test_gc_identifies_unreferenced_blobs() {
     let result: serde_json::Value = resp.json().unwrap();
 
     assert!(result["blobs_scanned"].as_u64().unwrap() >= 2);
-    assert!(result["blobs_to_delete"].as_u64().unwrap() >= 1);
+    assert!(result["blobs_unreferenced"].as_u64().unwrap() >= 1);
 
     // Verify orphaned blob still exists (dry-run)
     let resp = client

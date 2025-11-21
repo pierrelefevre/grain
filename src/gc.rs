@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-type BlobInfo = (String, String, u64); // (org, repo, size)
+type BlobLocation = (String, String, u64); // (org, repo, size)
 type UnreferencedBlob = (String, String, String, u64); // (org, repo, digest, size)
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -153,8 +153,8 @@ fn extract_blob_references(manifest_json: &str, referenced: &mut HashSet<String>
 /// Scan all blobs in storage
 fn scan_all_blobs(
     stats: &mut GcStats,
-) -> Result<HashMap<String, BlobInfo>, Box<dyn std::error::Error>> {
-    let mut all_blobs = HashMap::new(); // digest -> (org, repo, size)
+) -> Result<HashMap<String, Vec<BlobLocation>>, Box<dyn std::error::Error>> {
+    let mut all_blobs: HashMap<String, Vec<BlobLocation>> = HashMap::new();
     let blobs_dir = Path::new("./tmp/blobs");
 
     if !blobs_dir.exists() {
@@ -188,7 +188,11 @@ fn scan_all_blobs(
                 let digest = blob_entry.file_name().to_string_lossy().to_string();
                 let size = blob_entry.metadata()?.len();
 
-                all_blobs.insert(digest.clone(), (org.clone(), repo.clone(), size));
+                // Track all locations for this digest
+                all_blobs
+                    .entry(digest)
+                    .or_default()
+                    .push((org.clone(), repo.clone(), size));
             }
         }
     }
@@ -198,14 +202,17 @@ fn scan_all_blobs(
 
 /// Mark unreferenced blobs for deletion
 fn mark_unreferenced_blobs(
-    all_blobs: &HashMap<String, BlobInfo>,
+    all_blobs: &HashMap<String, Vec<BlobLocation>>,
     referenced_blobs: &HashSet<String>,
 ) -> Result<Vec<UnreferencedBlob>, Box<dyn std::error::Error>> {
     let mut unreferenced = Vec::new();
 
-    for (digest, (org, repo, size)) in all_blobs {
+    for (digest, locations) in all_blobs {
         if !referenced_blobs.contains(digest) {
-            unreferenced.push((org.clone(), repo.clone(), digest.clone(), *size));
+            // Add all locations of this unreferenced blob
+            for (org, repo, size) in locations {
+                unreferenced.push((org.clone(), repo.clone(), digest.clone(), *size));
+            }
         }
     }
 
