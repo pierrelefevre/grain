@@ -11,13 +11,20 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy manifests
+# Copy manifests first to cache dependencies layer
 COPY Cargo.toml ./
+
+# Create a dummy main.rs to build dependencies
+RUN mkdir -p src && \
+    echo "fn main() {}" > src/main.rs && \
+    cargo build --release && \
+    rm -rf src target/release/deps/grain* target/release/deps/grainctl*
 
 # Copy source code
 COPY src ./src
 
 # Build release binary (both grain and grainctl)
+# This layer will only rebuild if source code changes
 RUN cargo build --release
 
 # Runtime stage - use Google's distroless image for minimal attack surface

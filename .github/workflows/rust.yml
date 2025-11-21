@@ -14,6 +14,10 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
+            - name: Setup Rust cache
+              uses: Swatinem/rust-cache@v2
+              with:
+                shared-key: "format"
             - name: Check format
               run: cargo fmt -- --check
 
@@ -22,6 +26,10 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
+            - name: Setup Rust cache
+              uses: Swatinem/rust-cache@v2
+              with:
+                shared-key: "lint"
             - name: Lint all targets
               run: cargo clippy --all-targets --all-features -- -D warnings
 
@@ -30,18 +38,22 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
+            - name: Setup Rust cache
+              uses: Swatinem/rust-cache@v2
+              with:
+                shared-key: "build"
             - name: Build all binaries
               run: cargo build --verbose --all-targets
-            - name: Build grain binary
-              run: cargo build --verbose --bin grain
-            - name: Build grainctl binary
-              run: cargo build --verbose --bin grainctl
 
     build-release:
         name: Build Release
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
+            - name: Setup Rust cache
+              uses: Swatinem/rust-cache@v2
+              with:
+                shared-key: "release"
             - name: Build release binaries
               run: cargo build --release --all-targets
             - name: Verify grain binary exists
@@ -64,6 +76,10 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
+            - name: Setup Rust cache
+              uses: Swatinem/rust-cache@v2
+              with:
+                shared-key: "test"
             - name: Run unit tests
               run: cargo test --verbose --all-targets
             - name: Run integration tests
@@ -72,11 +88,27 @@ jobs:
     e2e-test:
         name: E2E Tests
         runs-on: ubuntu-latest
-        needs: build
+        needs: build-release
         steps:
             - uses: actions/checkout@v4
-            - name: Build release binaries
-              run: cargo build --release
+            - name: Download grain binary
+              uses: actions/download-artifact@v4
+              with:
+                  name: grain-binary
+                  path: target/release
+            - name: Download grainctl binary
+              uses: actions/download-artifact@v4
+              with:
+                  name: grainctl-binary
+                  path: target/release
+            - name: Make binaries executable
+              run: |
+                chmod +x target/release/grain
+                chmod +x target/release/grainctl
+            - name: Setup Rust cache
+              uses: Swatinem/rust-cache@v2
+              with:
+                shared-key: "e2e-test"
             - name: Run E2E tests (without Docker)
               run: cargo test --verbose --test '*' -- --test-threads=1
             - name: Run Docker client tests
@@ -95,11 +127,23 @@ jobs:
     integration-test:
         name: Integration Test
         runs-on: ubuntu-latest
-        needs: build
+        needs: build-release
         steps:
             - uses: actions/checkout@v4
-            - name: Build binaries
-              run: cargo build --release
+            - name: Download grain binary
+              uses: actions/download-artifact@v4
+              with:
+                  name: grain-binary
+                  path: target/release
+            - name: Download grainctl binary
+              uses: actions/download-artifact@v4
+              with:
+                  name: grainctl-binary
+                  path: target/release
+            - name: Make binaries executable
+              run: |
+                chmod +x target/release/grain
+                chmod +x target/release/grainctl
             - name: Create test users file
               run: |
                   mkdir -p tmp
