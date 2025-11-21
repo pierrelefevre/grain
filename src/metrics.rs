@@ -5,6 +5,10 @@ use prometheus::{
 };
 
 lazy_static::lazy_static! {
+    // Prometheus metric registration - intentionally panics on failure as these are
+    // initialization-time requirements. If metrics cannot be registered, the server
+    // should fail early rather than run with broken metrics.
+
     // Request counters
     pub static ref HTTP_REQUESTS_TOTAL: IntCounterVec = register_int_counter_vec!(
         "grain_http_requests_total",
@@ -61,12 +65,12 @@ pub async fn metrics() -> Response {
         return Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
             .body(Body::from("Failed to encode metrics"))
-            .unwrap();
+            .expect("Failed to build metrics error response");
     }
 
     Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", encoder.format_type())
         .body(Body::from(buffer))
-        .unwrap()
+        .expect("Failed to build metrics response")
 }

@@ -84,7 +84,7 @@ pub(crate) async fn get_tags_list(
                 .status(StatusCode::OK)
                 .header("Content-Type", "application/json")
                 .body(Body::from(response_body.to_string()))
-                .unwrap()
+                .expect("Failed to build tags list response")
         }
         Err(e) => {
             log::error!("Failed to list tags for {}/{}: {}", org, repo, e);
@@ -99,7 +99,7 @@ pub(crate) async fn get_tags_list(
                 .status(StatusCode::OK)
                 .header("Content-Type", "application/json")
                 .body(Body::from(response_body.to_string()))
-                .unwrap()
+                .expect("Failed to build empty tags list response")
         }
     }
 }

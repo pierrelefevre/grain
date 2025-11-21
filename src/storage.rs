@@ -18,11 +18,13 @@ pub(crate) fn sanitize_string(input: &str) -> String {
 }
 
 pub(crate) async fn write_blob(org: &str, repo: &str, req_digest_string: &str, body: Body) -> bool {
-    let bytes_res = axum::body::to_bytes(body, usize::MAX).await;
-    if bytes_res.is_err() {
-        return false;
-    }
-    let bytes = bytes_res.unwrap();
+    let bytes = match axum::body::to_bytes(body, usize::MAX).await {
+        Ok(b) => b,
+        Err(e) => {
+            log::error!("storage/write_blob: failed to read body: {}", e);
+            return false;
+        }
+    };
 
     let req_digest = req_digest_string
         .strip_prefix("sha256:")

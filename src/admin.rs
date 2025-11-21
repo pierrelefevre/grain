@@ -87,7 +87,7 @@ pub async fn list_users(State(state): State<Arc<state::App>>, headers: HeaderMap
             })
             .to_string(),
         ))
-        .unwrap()
+        .expect("Failed to build user list response")
 }
 
 /// Create new user (admin only)
@@ -132,7 +132,7 @@ pub async fn create_user(
             return Response::builder()
                 .status(StatusCode::BAD_REQUEST)
                 .body(Body::from(format!("Invalid request: {}", e)))
-                .unwrap();
+                .expect("Failed to build bad request response");
         }
     };
 
@@ -173,7 +173,7 @@ pub async fn create_user(
             })
             .to_string(),
         ))
-        .unwrap()
+        .expect("Failed to build create user response")
 }
 
 /// Delete user (admin only)
@@ -218,7 +218,7 @@ pub async fn delete_user(
         return Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body(Body::from("Cannot delete yourself"))
-            .unwrap();
+            .expect("Failed to build self-deletion prevention response");
     }
 
     // Remove user
@@ -243,7 +243,7 @@ pub async fn delete_user(
     Response::builder()
         .status(StatusCode::OK)
         .body(Body::empty())
-        .unwrap()
+        .expect("Failed to build delete user response")
 }
 
 /// Add permission to user (admin only)
@@ -292,7 +292,7 @@ pub async fn add_permission(
             return Response::builder()
                 .status(StatusCode::BAD_REQUEST)
                 .body(Body::from(format!("Invalid request: {}", e)))
-                .unwrap();
+                .expect("Failed to build bad request response");
         }
     };
 
@@ -344,8 +344,10 @@ pub async fn add_permission(
     Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&new_permission).unwrap()))
-        .unwrap()
+        .body(Body::from(
+            serde_json::to_string(&new_permission).unwrap_or_else(|_| "{}".to_string()),
+        ))
+        .expect("Failed to build add permission response")
 }
 
 /// Add permission to user via body (admin only) - alternative endpoint with username in body
@@ -390,7 +392,7 @@ pub async fn add_permission_with_username(
             return Response::builder()
                 .status(StatusCode::BAD_REQUEST)
                 .body(Body::from(format!("Invalid request: {}", e)))
-                .unwrap();
+                .expect("Failed to build bad request response for add_permission_with_username");
         }
     };
 
@@ -442,8 +444,10 @@ pub async fn add_permission_with_username(
     Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&new_permission).unwrap()))
-        .unwrap()
+        .body(Body::from(
+            serde_json::to_string(&new_permission).unwrap_or_else(|_| "{}".to_string()),
+        ))
+        .expect("Failed to build add permission with username response")
 }
 
 /// Save users to file
@@ -522,8 +526,10 @@ pub async fn run_garbage_collection(
         Ok(stats) => Response::builder()
             .status(StatusCode::OK)
             .header("Content-Type", "application/json")
-            .body(Body::from(serde_json::to_string_pretty(&stats).unwrap()))
-            .unwrap(),
+            .body(Body::from(
+                serde_json::to_string_pretty(&stats).unwrap_or_else(|_| "{}".to_string()),
+            ))
+            .expect("Failed to build GC response"),
         Err(e) => {
             log::error!("GC failed: {}", e);
             response::internal_error()

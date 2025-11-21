@@ -96,7 +96,7 @@ impl OciErrorResponse {
             .status(status)
             .header("Content-Type", "application/json")
             .body(Body::from(json))
-            .unwrap()
+            .expect("Failed to build OCI error response")
     }
 }
 

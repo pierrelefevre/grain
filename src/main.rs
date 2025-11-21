@@ -117,6 +117,16 @@ async fn main() {
         );
 
     log::info!("Listening on: {}", &args.host);
-    let listener = tokio::net::TcpListener::bind(&args.host).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = match tokio::net::TcpListener::bind(&args.host).await {
+        Ok(l) => l,
+        Err(e) => {
+            log::error!("Failed to bind to {}: {}", &args.host, e);
+            std::process::exit(1);
+        }
+    };
+
+    if let Err(e) = axum::serve(listener, app).await {
+        log::error!("Server error: {}", e);
+        std::process::exit(1);
+    }
 }

@@ -213,6 +213,7 @@ fn validate_descriptor(desc: &Descriptor) -> Result<(), ValidationError> {
 
 fn validate_digest(digest: &str) -> Result<(), ValidationError> {
     lazy_static::lazy_static! {
+        // Static regex compilation - safe to unwrap as pattern is hardcoded and valid
         static ref DIGEST_REGEX: Regex = Regex::new(r"^[a-z0-9]+:[a-f0-9]{32,}$").unwrap();
     }
 

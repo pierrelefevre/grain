@@ -17,7 +17,7 @@ pub(crate) fn unauthorized(host: &str) -> Response<Body> {
                     .to_string()
             },
         )))
-        .unwrap()
+        .expect("Failed to build unauthorized response")
 }
 
 pub(crate) fn forbidden() -> Response<Body> {
@@ -83,7 +83,7 @@ pub(crate) fn internal_error() -> Response<Body> {
         .body(Body::from(
             r#"{"errors":[{"code":"UNKNOWN","message":"internal server error"}]}"#,
         ))
-        .unwrap()
+        .expect("Failed to build internal error response")
 }
 
 pub(crate) fn conflict(message: &str) -> Response<Body> {
@@ -94,5 +94,5 @@ pub(crate) fn conflict(message: &str) -> Response<Body> {
             r#"{{"errors":[{{"code":"UNSUPPORTED","message":"{}"}}]}}"#,
             message
         )))
-        .unwrap()
+        .expect("Failed to build conflict response")
 }
