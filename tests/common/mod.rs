@@ -59,7 +59,7 @@ impl TestServer {
     pub fn start(&mut self) {
         // Get the workspace root directory
         let workspace_root = std::env::current_dir().expect("Failed to get current directory");
-        
+
         // Build if not already built
         let build_status = Command::new("cargo")
             .args(["build", "--bin", "grain"])
@@ -71,7 +71,11 @@ impl TestServer {
 
         // Path to the binary
         let binary_path = workspace_root.join("target/debug/grain");
-        assert!(binary_path.exists(), "grain binary not found at {:?}", binary_path);
+        assert!(
+            binary_path.exists(),
+            "grain binary not found at {:?}",
+            binary_path
+        );
 
         // Change to temp directory for storage
         let temp_path = self.temp_dir.path();
