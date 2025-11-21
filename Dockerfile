@@ -14,7 +14,8 @@ RUN apt-get update && apt-get install -y \
 # Copy manifests first to cache dependencies layer
 COPY Cargo.toml ./
 
-# Create a dummy main.rs to build dependencies
+# Create dummy binaries to build dependencies (caches this layer)
+# We only remove the final binaries, leaving dependency artifacts intact for caching
 RUN mkdir -p src/bin && \
     echo "fn main() {}" > src/main.rs && \
     echo "fn main() {}" > src/bin/grainctl.rs && \
