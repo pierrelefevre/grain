@@ -392,7 +392,7 @@ pub async fn add_permission_with_username(
             return Response::builder()
                 .status(StatusCode::BAD_REQUEST)
                 .body(Body::from(format!("Invalid request: {}", e)))
-                .expect("Failed to build bad request response for add_permission_with_username");
+                .expect("Failed to build bad request response");
         }
     };
 

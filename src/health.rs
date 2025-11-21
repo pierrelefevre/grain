@@ -72,8 +72,10 @@ pub async fn readiness(State(state): State<Arc<state::App>>) -> Response {
         .status(status)
         .header("Content-Type", "application/json")
         .body(Body::from(
-            serde_json::to_string_pretty(&response)
-                .unwrap_or_else(|_| r#"{"ready":false}"#.to_string()),
+            serde_json::to_string_pretty(&response).unwrap_or_else(|_| {
+                r#"{"ready":false,"checks":{"storage_accessible":false,"users_loaded":false}}"#
+                    .to_string()
+            }),
         ))
         .expect("Failed to build readiness response")
 }
@@ -110,8 +112,10 @@ pub async fn health(State(_state): State<Arc<state::App>>) -> Response {
         .status(status)
         .header("Content-Type", "application/json")
         .body(Body::from(
-            serde_json::to_string_pretty(&health)
-                .unwrap_or_else(|_| r#"{"status":"unhealthy"}"#.to_string()),
+            serde_json::to_string_pretty(&health).unwrap_or_else(|_| {
+                r#"{"status":"unhealthy","version":"unknown","uptime_seconds":0,"storage":{"accessible":false,"blobs_path":"./tmp/blobs","manifests_path":"./tmp/manifests","writable":false}}"#
+                    .to_string()
+            }),
         ))
         .expect("Failed to build health response")
 }
