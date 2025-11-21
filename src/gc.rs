@@ -1,9 +1,8 @@
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-type BlobInfo = (String, String, u64); // (org, repo, size)
 type UnreferencedBlob = (String, String, String, u64); // (org, repo, digest, size)
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -49,7 +48,7 @@ pub fn run_gc(
     // Step 2: Scan all blobs and identify unreferenced ones
     let all_blobs = scan_all_blobs(&mut stats)?;
 
-    log::info!("Scanned {} total blobs", stats.blobs_scanned);
+    log::info!("Scanned {} total blob instances", stats.blobs_scanned);
 
     // Step 3: Mark unreferenced blobs
     let unreferenced_blobs = mark_unreferenced_blobs(&all_blobs, &referenced_blobs)?;
@@ -153,8 +152,8 @@ fn extract_blob_references(manifest_json: &str, referenced: &mut HashSet<String>
 /// Scan all blobs in storage
 fn scan_all_blobs(
     stats: &mut GcStats,
-) -> Result<HashMap<String, BlobInfo>, Box<dyn std::error::Error>> {
-    let mut all_blobs = HashMap::new(); // digest -> (org, repo, size)
+) -> Result<Vec<UnreferencedBlob>, Box<dyn std::error::Error>> {
+    let mut all_blobs = Vec::new(); // Vec of (org, repo, digest, size)
     let blobs_dir = Path::new("./tmp/blobs");
 
     if !blobs_dir.exists() {
@@ -188,7 +187,7 @@ fn scan_all_blobs(
                 let digest = blob_entry.file_name().to_string_lossy().to_string();
                 let size = blob_entry.metadata()?.len();
 
-                all_blobs.insert(digest.clone(), (org.clone(), repo.clone(), size));
+                all_blobs.push((org.clone(), repo.clone(), digest, size));
             }
         }
     }
@@ -198,12 +197,12 @@ fn scan_all_blobs(
 
 /// Mark unreferenced blobs for deletion
 fn mark_unreferenced_blobs(
-    all_blobs: &HashMap<String, BlobInfo>,
+    all_blobs: &[UnreferencedBlob],
     referenced_blobs: &HashSet<String>,
 ) -> Result<Vec<UnreferencedBlob>, Box<dyn std::error::Error>> {
     let mut unreferenced = Vec::new();
 
-    for (digest, (org, repo, size)) in all_blobs {
+    for (org, repo, digest, size) in all_blobs {
         if !referenced_blobs.contains(digest) {
             unreferenced.push((org.clone(), repo.clone(), digest.clone(), *size));
         }
