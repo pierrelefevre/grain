@@ -65,6 +65,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
+          # Disable incremental compilation for cleaner caching and faster builds
+          # Use CLI git fetch for better compatibility with CI environments
           build-args: |
             CARGO_INCREMENTAL=0
             CARGO_NET_GIT_FETCH_WITH_CLI=true

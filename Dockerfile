@@ -15,10 +15,11 @@ RUN apt-get update && apt-get install -y \
 COPY Cargo.toml ./
 
 # Create a dummy main.rs to build dependencies
-RUN mkdir -p src && \
+RUN mkdir -p src/bin && \
     echo "fn main() {}" > src/main.rs && \
+    echo "fn main() {}" > src/bin/grainctl.rs && \
     cargo build --release && \
-    rm -rf src target/release/deps/grain* target/release/deps/grainctl*
+    rm -rf src target/release/grain target/release/grainctl
 
 # Copy source code
 COPY src ./src

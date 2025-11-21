@@ -110,10 +110,6 @@ jobs:
               run: |
                 chmod +x target/release/grain
                 chmod +x target/release/grainctl
-            - name: Setup Rust cache
-              uses: Swatinem/rust-cache@v2
-              with:
-                shared-key: "e2e-test"
             - name: Run E2E tests (without Docker)
               run: cargo test --verbose --test '*' -- --test-threads=1
             - name: Run Docker client tests
