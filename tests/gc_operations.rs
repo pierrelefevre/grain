@@ -395,7 +395,13 @@ fn test_gc_preserves_shared_blobs_across_repos() {
             "size": shared_blob.len(),
             "digest": shared_digest
         },
-        "layers": []
+        "layers": [
+            {
+                "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                "size": shared_blob.len(),
+                "digest": shared_digest
+            }
+        ]
     });
 
     client
@@ -425,7 +431,13 @@ fn test_gc_preserves_shared_blobs_across_repos() {
             "size": shared_blob.len(),
             "digest": shared_digest
         },
-        "layers": []
+        "layers": [
+            {
+                "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                "size": shared_blob.len(),
+                "digest": shared_digest
+            }
+        ]
     });
 
     client
