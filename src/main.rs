@@ -96,6 +96,10 @@ async fn main() {
             "/admin/users/{username}/permissions",
             post(admin::add_permission),
         )
+        .route(
+            "/admin/permissions",
+            post(admin::add_permission_with_username),
+        )
         .route("/admin/gc", post(admin::run_garbage_collection))
         // Catch-all routes for debugging
         .route("/{*path}", head(meta::catch_all_head))

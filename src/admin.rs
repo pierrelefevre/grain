@@ -26,6 +26,14 @@ pub struct AddPermissionRequest {
     pub actions: Vec<String>,
 }
 
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct AddPermissionWithUsernameRequest {
+    pub username: String,
+    pub repository: String,
+    pub tag: String,
+    pub actions: Vec<String>,
+}
+
 /// Check if user is admin (has wildcard delete permission)
 fn is_admin(user: &state::User) -> bool {
     permissions::has_permission(user, "*", Some("*"), permissions::Action::Delete)
@@ -74,7 +82,10 @@ pub async fn list_users(State(state): State<Arc<state::App>>, headers: HeaderMap
         .status(StatusCode::OK)
         .header("Content-Type", "application/json")
         .body(Body::from(
-            serde_json::to_string_pretty(&user_list).unwrap(),
+            serde_json::json!({
+                "users": user_list
+            })
+            .to_string(),
         ))
         .unwrap()
 }
@@ -229,7 +240,10 @@ pub async fn delete_user(
 
     log::info!("Deleted user: {}", username);
 
-    response::no_content()
+    Response::builder()
+        .status(StatusCode::OK)
+        .body(Body::empty())
+        .unwrap()
 }
 
 /// Add permission to user (admin only)
@@ -324,6 +338,104 @@ pub async fn add_permission(
     log::info!(
         "Added permission for user {}: {:?}",
         username,
+        new_permission
+    );
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&new_permission).unwrap()))
+        .unwrap()
+}
+
+/// Add permission to user via body (admin only) - alternative endpoint with username in body
+#[utoipa::path(
+    post,
+    path = "/admin/permissions",
+    request_body = AddPermissionWithUsernameRequest,
+    responses(
+        (status = 201, description = "Permission added successfully", content_type = "application/json"),
+        (status = 400, description = "Bad request - invalid JSON"),
+        (status = 401, description = "Unauthorized - authentication required"),
+        (status = 403, description = "Forbidden - admin permission required"),
+        (status = 404, description = "Not found - user does not exist"),
+        (status = 500, description = "Internal server error - failed to save users")
+    ),
+    security(
+        ("basic_auth" = [])
+    )
+)]
+pub async fn add_permission_with_username(
+    State(state): State<Arc<state::App>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let host = &state.args.host;
+
+    // Authenticate
+    let user = match auth::authenticate_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(_) => return response::unauthorized(host),
+    };
+
+    // Check admin permission
+    if !is_admin(&user) {
+        return response::forbidden();
+    }
+
+    // Parse request
+    let req: AddPermissionWithUsernameRequest = match serde_json::from_slice(&body) {
+        Ok(r) => r,
+        Err(e) => {
+            return Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Body::from(format!("Invalid request: {}", e)))
+                .unwrap();
+        }
+    };
+
+    let new_permission = state::Permission {
+        repository: req.repository,
+        tag: req.tag,
+        actions: req.actions,
+    };
+
+    // Add permission to user
+    {
+        let mut users = state.users.lock().await;
+        let mut user_found = false;
+
+        // Create new set with updated user
+        let updated_users: std::collections::HashSet<_> = users
+            .iter()
+            .map(|u| {
+                if u.username == req.username {
+                    user_found = true;
+                    let mut updated = u.clone();
+                    updated.permissions.push(new_permission.clone());
+                    updated
+                } else {
+                    u.clone()
+                }
+            })
+            .collect();
+
+        if !user_found {
+            return response::not_found();
+        }
+
+        *users = updated_users;
+    }
+
+    // Persist to file
+    if let Err(e) = save_users(&state).await {
+        log::error!("Failed to save users: {}", e);
+        return response::internal_error();
+    }
+
+    log::info!(
+        "Added permission for user {}: {:?}",
+        req.username,
         new_permission
     );
 

@@ -86,13 +86,6 @@ pub(crate) fn internal_error() -> Response<Body> {
         .unwrap()
 }
 
-pub(crate) fn no_content() -> Response<Body> {
-    Response::builder()
-        .status(StatusCode::NO_CONTENT)
-        .body(Body::empty())
-        .unwrap()
-}
-
 pub(crate) fn conflict(message: &str) -> Response<Body> {
     Response::builder()
         .status(StatusCode::CONFLICT)
