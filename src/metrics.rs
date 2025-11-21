@@ -66,7 +66,10 @@ pub async fn metrics() -> Response {
 
     Response::builder()
         .status(StatusCode::OK)
-        .header("Content-Type", encoder.format_type())
+        .header(
+            "Content-Type",
+            format!("{}; charset=utf-8", encoder.format_type()),
+        )
         .body(Body::from(buffer))
         .unwrap()
 }

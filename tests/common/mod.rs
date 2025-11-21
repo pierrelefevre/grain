@@ -34,9 +34,9 @@ impl TestServer {
         let temp_path = temp_dir.path();
 
         // Setup storage directories
-        std::fs::create_dir_all(temp_path.join("blobs")).unwrap();
-        std::fs::create_dir_all(temp_path.join("manifests")).unwrap();
-        std::fs::create_dir_all(temp_path.join("uploads")).unwrap();
+        std::fs::create_dir_all(temp_path.join("tmp/blobs")).unwrap();
+        std::fs::create_dir_all(temp_path.join("tmp/manifests")).unwrap();
+        std::fs::create_dir_all(temp_path.join("tmp/uploads")).unwrap();
 
         // Create users.json
         let users_file = temp_path.join("users.json");

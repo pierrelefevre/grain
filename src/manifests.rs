@@ -217,10 +217,20 @@ pub(crate) async fn put_manifest_by_reference(
         }
     }
 
-    // Store the validated manifest
+    // Calculate digest first (will be used for storage and header)
+    let digest = sha256::digest(bytes.as_ref());
+
+    // Store the validated manifest by the requested reference (tag or digest)
     let success = storage::write_manifest_bytes(&org, &repo, &reference, &bytes).await;
     if !success {
         return response::manifest_invalid("failed to write manifest");
+    }
+
+    // If reference is a tag (not a digest), also store by digest for retrieval by digest
+    // This allows manifests to be retrieved both by tag and by content-addressable digest
+    // Note: We store without "sha256:" prefix to match how GET strips the prefix
+    if !reference.starts_with("sha256:") {
+        storage::write_manifest_bytes(&org, &repo, &digest, &bytes).await;
     }
 
     metrics::MANIFEST_UPLOADS_TOTAL.inc();
@@ -231,6 +241,7 @@ pub(crate) async fn put_manifest_by_reference(
             "Location",
             format!("/v2/{}/{}/manifests/{}", org, repo, reference),
         )
+        .header("Docker-Content-Digest", format!("sha256:{}", digest))
         .body(Body::empty())
         .expect("Failed to build response")
 }

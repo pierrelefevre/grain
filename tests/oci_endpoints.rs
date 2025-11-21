@@ -3,6 +3,18 @@ mod common;
 use common::*;
 use serial_test::serial;
 
+fn extract_path(location: &str) -> &str {
+    // Extract path from absolute URL (e.g., "http://127.0.0.1:8080/v2/..." -> "/v2/...")
+    location
+        .find("://")
+        .and_then(|proto_end| {
+            location[proto_end + 3..]
+                .find('/')
+                .map(|path_start| &location[proto_end + 3 + path_start..])
+        })
+        .unwrap_or(location)
+}
+
 #[test]
 #[serial]
 fn test_end1_version_check_authenticated() {
@@ -167,7 +179,7 @@ fn test_end5_end6_chunked_upload_complete() {
     // PATCH: Upload chunk
     let blob = sample_blob();
     let resp = client
-        .patch(location)
+        .patch(extract_path(location))
         .basic_auth("admin", Some("admin"))
         .header("Content-Type", "application/octet-stream")
         .body(blob.clone())
@@ -180,7 +192,7 @@ fn test_end5_end6_chunked_upload_complete() {
     // PUT: Complete upload
     let digest = sample_blob_digest();
     let resp = client
-        .put(&format!("{}?digest={}", location, digest))
+        .put(&format!("{}?digest={}", extract_path(location), digest))
         .basic_auth("admin", Some("admin"))
         .send()
         .unwrap();
@@ -205,7 +217,7 @@ fn test_end6_complete_upload_with_digest_mismatch() {
 
     let blob = sample_blob();
     let resp = client
-        .patch(location)
+        .patch(extract_path(location))
         .basic_auth("admin", Some("admin"))
         .body(blob)
         .send()
@@ -215,7 +227,11 @@ fn test_end6_complete_upload_with_digest_mismatch() {
     // Try to complete with wrong digest
     let wrong_digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
     let resp = client
-        .put(&format!("{}?digest={}", location, wrong_digest))
+        .put(&format!(
+            "{}?digest={}",
+            extract_path(location),
+            wrong_digest
+        ))
         .basic_auth("admin", Some("admin"))
         .send()
         .unwrap();

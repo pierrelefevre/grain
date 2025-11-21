@@ -167,9 +167,12 @@ pub(crate) fn list_tags(org: &str, repo: &str) -> Result<Vec<String>, std::io::E
         let entry = entry?;
         if entry.path().is_file() {
             if let Some(filename) = entry.file_name().to_str() {
-                // Filter out digest references (start with sha256:)
+                // Filter out digest references (64-char hex strings or sha256: prefixed)
                 // Only include tag names
-                if !filename.starts_with("sha256:") {
+                let is_digest = filename.starts_with("sha256:")
+                    || (filename.len() == 64 && filename.chars().all(|c| c.is_ascii_hexdigit()));
+
+                if !is_digest {
                     tags.push(filename.to_string());
                 }
             }
