@@ -6,6 +6,5 @@ your-registry.example.com {
     reverse_proxy grain:8888
     log {
         output file /var/log/caddy/grain_access.log
-        format single_field common_log
     }
 }
