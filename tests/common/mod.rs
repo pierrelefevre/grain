@@ -217,7 +217,7 @@ pub fn default_test_users() -> serde_json::Value {
                     {
                         "repository": "myorg/myrepo",
                         "tag": "v*",
-                        "actions": ["pull"]
+                        "actions": ["pull", "push"]
                     }
                 ]
             }

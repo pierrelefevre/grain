@@ -33,16 +33,28 @@ pub(crate) async fn get_manifest_by_reference(
     headers: HeaderMap,
 ) -> Response<Body> {
     let host = &state.args.host;
-
-    if auth::get(State(state.clone()), headers.clone())
-        .await
-        .status()
-        != StatusCode::OK
-    {
-        return response::unauthorized(host);
-    }
-
+    let repository = format!("{}/{}", org, repo);
     let clean_reference = reference.strip_prefix("sha256:").unwrap_or(&reference);
+
+    // Check permission (Pull for manifest retrieval, tag-specific)
+    match auth::check_permission(
+        &state,
+        &headers,
+        &repository,
+        Some(clean_reference),
+        permissions::Action::Pull,
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(_) => {
+            return if auth::authenticate_user(&state, &headers).await.is_ok() {
+                response::forbidden()
+            } else {
+                response::unauthorized(host)
+            };
+        }
+    }
 
     log::info!(
         "manifests/get_manifest_by_reference: org: {}, repo: {}, reference: {}",
