@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use axum::{
+    extract::DefaultBodyLimit,
     routing::{delete, get, head, patch, post, put},
     Router,
 };
@@ -109,6 +110,7 @@ async fn main() {
         .route("/{*path}", patch(meta::catch_all_patch))
         .route("/{*path}", delete(meta::catch_all_delete))
         .with_state(shared_state)
+        .layer(DefaultBodyLimit::disable()) // Allow unlimited body size for blob uploads
         .layer(axum::middleware::from_fn(middleware::track_metrics))
         .layer(CorsLayer::permissive())
         .merge(
