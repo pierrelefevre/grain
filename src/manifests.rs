@@ -76,7 +76,7 @@ pub(crate) async fn get_manifest_by_reference(
                 .header("Content-Type", content_type)
                 .header("Docker-Content-Digest", format!("sha256:{}", digest))
                 .body(Body::from(manifest_data))
-                .unwrap()
+                .expect("Failed to build manifest response")
         }
         Err(e) => {
             log::error!(
@@ -143,7 +143,7 @@ pub(crate) async fn head_manifest_by_reference(
                 .header("Content-Type", content_type)
                 .header("Docker-Content-Digest", format!("sha256:{}", digest))
                 .body(Body::empty())
-                .unwrap()
+                .expect("Failed to build manifest HEAD response")
         }
         Err(e) => {
             log::error!(
@@ -291,7 +291,7 @@ pub(crate) async fn delete_manifest_by_reference(
             Response::builder()
                 .status(StatusCode::ACCEPTED)
                 .body(Body::empty())
-                .unwrap()
+                .expect("Failed to build manifest delete response")
         }
         Err(e) => {
             if e.kind() == std::io::ErrorKind::NotFound {

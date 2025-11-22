@@ -75,7 +75,7 @@ pub(crate) async fn get_blob_by_digest(
                 .header("Docker-Content-Digest", format!("sha256:{}", clean_digest))
                 .header("Content-Type", "application/octet-stream")
                 .body(Body::from(blob_data))
-                .unwrap()
+                .expect("Failed to build blob response")
         }
         Err(e) => {
             log::warn!(
@@ -122,7 +122,7 @@ pub(crate) async fn head_blob_by_digest(
                 Response::builder()
                     .status(StatusCode::FORBIDDEN)
                     .body(Body::empty())
-                    .unwrap()
+                    .expect("Failed to build forbidden response")
             } else {
                 Response::builder()
                     .status(StatusCode::UNAUTHORIZED)
@@ -131,7 +131,7 @@ pub(crate) async fn head_blob_by_digest(
                         format!("Basic realm=\"{}\", charset=\"UTF-8\"", host),
                     )
                     .body(Body::empty())
-                    .unwrap()
+                    .expect("Failed to build unauthorized response")
             };
         }
     }
@@ -149,7 +149,7 @@ pub(crate) async fn head_blob_by_digest(
             .header("Docker-Content-Digest", format!("sha256:{}", clean_digest))
             .header("Content-Type", "application/octet-stream")
             .body(Body::empty())
-            .unwrap(),
+            .expect("Failed to build blob HEAD response"),
         Err(e) => {
             log::warn!(
                 "blobs/head_blob_by_digest: blob not found: {}/{}/{}: {}",
@@ -247,7 +247,7 @@ pub(crate) async fn post_blob_upload(
                             .header("Location", location)
                             .header("Docker-Content-Digest", format!("sha256:{}", clean_digest))
                             .body(Body::empty())
-                            .unwrap();
+                            .expect("Failed to build blob mount response");
                     }
                     Err(e) => {
                         log::warn!(
@@ -290,7 +290,7 @@ pub(crate) async fn post_blob_upload(
             )
             .header("Docker-Content-Digest", format!("sha256:{}", clean_digest))
             .body(Body::empty())
-            .unwrap();
+            .expect("Failed to build blob upload response");
     }
 
     // Create new upload session (end-4a)
@@ -309,7 +309,7 @@ pub(crate) async fn post_blob_upload(
         .header("Range", "0-0")
         .header("Docker-Upload-UUID", uuid)
         .body(Body::empty())
-        .unwrap()
+        .expect("Failed to build upload session response")
 }
 
 // end-5 PATCH /v2/:name/blobs/uploads/:reference
@@ -359,7 +359,7 @@ pub(crate) async fn patch_blob_upload(
                 .header("Range", format!("0-{}", total_size.saturating_sub(1)))
                 .header("Docker-Upload-UUID", &uuid)
                 .body(Body::empty())
-                .unwrap()
+                .expect("Failed to build chunk append response")
         }
         Err(e) => {
             log::error!("Failed to append chunk for upload {}: {}", uuid, e);
@@ -435,7 +435,7 @@ pub(crate) async fn put_blob_upload_by_reference(
                 .header("Location", location)
                 .header("Docker-Content-Digest", format!("sha256:{}", actual_digest))
                 .body(Body::empty())
-                .unwrap()
+                .expect("Failed to build upload finalize response")
         }
         Err(e) => {
             log::error!("Failed to finalize upload: {}", e);
@@ -501,7 +501,7 @@ pub(crate) async fn delete_blob_by_digest(
             Response::builder()
                 .status(StatusCode::ACCEPTED)
                 .body(Body::empty())
-                .unwrap()
+                .expect("Failed to build blob delete response")
         }
         Err(e) => {
             if e.kind() == std::io::ErrorKind::NotFound {

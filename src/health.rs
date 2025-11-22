@@ -44,7 +44,7 @@ pub async fn liveness() -> Response {
         .status(StatusCode::OK)
         .header("Content-Type", "application/json")
         .body(Body::from(r#"{"status":"alive"}"#))
-        .unwrap()
+        .expect("Failed to build liveness response")
 }
 
 /// Readiness probe - is the server ready to handle requests?
@@ -71,8 +71,13 @@ pub async fn readiness(State(state): State<Arc<state::App>>) -> Response {
     Response::builder()
         .status(status)
         .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string_pretty(&response).unwrap()))
-        .unwrap()
+        .body(Body::from(
+            serde_json::to_string_pretty(&response).unwrap_or_else(|_| {
+                r#"{"ready":false,"checks":{"storage_accessible":false,"users_loaded":false}}"#
+                    .to_string()
+            }),
+        ))
+        .expect("Failed to build readiness response")
 }
 
 /// Detailed health endpoint
@@ -106,8 +111,13 @@ pub async fn health(State(_state): State<Arc<state::App>>) -> Response {
     Response::builder()
         .status(status)
         .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string_pretty(&health).unwrap()))
-        .unwrap()
+        .body(Body::from(
+            serde_json::to_string_pretty(&health).unwrap_or_else(|_| {
+                r#"{"status":"unhealthy","version":"unknown","uptime_seconds":0,"storage":{"accessible":false,"blobs_path":"./tmp/blobs","manifests_path":"./tmp/manifests","writable":false}}"#
+                    .to_string()
+            }),
+        ))
+        .expect("Failed to build health response")
 }
 
 fn check_storage_accessibility() -> bool {

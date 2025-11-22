@@ -82,7 +82,7 @@ pub(crate) async fn get(State(data): State<Arc<state::App>>, headers: HeaderMap)
             Response::builder()
                 .status(200)
                 .body(Body::from("200 OK"))
-                .unwrap()
+                .expect("Failed to build auth success response")
         }
         Err(_) => {
             log::warn!("Authentication failed");
