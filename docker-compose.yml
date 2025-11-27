@@ -3,7 +3,7 @@ services:
     image: ghcr.io/pierrelefevre/grain:latest
     container_name: grain-registry
     ports:
-      - "8888:8888"
+      - "127.0.0.1:8888:8888"
     restart: unless-stopped
     environment:
       - RUST_LOG=info
