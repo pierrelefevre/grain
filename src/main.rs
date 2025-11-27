@@ -38,6 +38,7 @@ async fn main() {
 
     // Shared app state
     let shared_state = Arc::new(state::new_app(&args));
+    let state_clone = shared_state.clone();
 
     let app = Router::new()
         .route("/", get(meta::index)) // Index, info
@@ -109,7 +110,7 @@ async fn main() {
         .route("/{*path}", put(meta::catch_all_put))
         .route("/{*path}", patch(meta::catch_all_patch))
         .route("/{*path}", delete(meta::catch_all_delete))
-        .with_state(shared_state)
+        .with_state(state_clone)
         .layer(DefaultBodyLimit::disable()) // Allow unlimited body size for blob uploads
         .layer(axum::middleware::from_fn(middleware::track_metrics))
         .layer(CorsLayer::permissive())
@@ -120,5 +121,13 @@ async fn main() {
 
     log::info!("Listening on: {}", &args.host);
     let listener = tokio::net::TcpListener::bind(&args.host).await.unwrap();
+
+    // Mark server as ready after successful bind
+    {
+        let mut status = shared_state.server_status.lock().await;
+        *status = state::ServerStatus::Ready;
+        log::info!("Server status: Ready");
+    }
+
     axum::serve(listener, app).await.unwrap();
 }
